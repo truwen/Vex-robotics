@@ -1,116 +1,91 @@
-Neon Rift Arena (Offline, Vanilla HTML/CSS/JS)
+Neon Rift Arena 
 ===============================================
 
-Neon Rift Arena is a local/offline wave-survival prototype.
-Run by opening `index.html` directly.
+Deeper progression build of Neon Rift Arena.
+Run by opening `index.html` directly (no server, no npm, no framework).
 
-No npm, no frameworks, no build tools, no server.
-
-Files
------
-- index.html : canvas + HUD + menu overlay + shop overlay
-- style.css  : neon layout, passive HUD, interactive menus
-- script.js  : game state, waves, enemies, drones, shop, settings, rendering
-- README.txt : guide
-
-How to Run
-----------
-1) Keep files together in one folder.
-2) Double-click `index.html`.
-3) Use Main Menu -> Start Game.
-
-Game states / menus
--------------------
-- Main Menu
-- Settings Menu
-- How To Play
-- Playing
-- Shop
-- Paused
-- Game Over
+Core additions in this build
+----------------------------
+- 5-weapon loadout with hot-swap (1-5)
+- money orb pickups (green glowing drops with magnet pull)
+- rare drops (temporary/permanent in-run bonuses)
+- repeatable upgrades to reduce progression stall after capped upgrades
+- keyboard flight upgrades (WASD + Space) while preserving optional mouse mode
+- persistent settings + persistent high scores via localStorage
 
 Controls
 --------
-- Arrow Left / Arrow Right = rotate
-- Arrow Up = thrust
-- Space = shoot
-- Left Mouse = shoot / hold fire
-- Right Mouse hold = thrust (if enabled)
-- P or Escape = pause menu
+- W / ArrowUp = thrust
+- A / ArrowLeft = rotate left
+- D / ArrowRight = rotate right
+- S / ArrowDown = brake / dampening
+- Space / Left Mouse = fire current primary weapon
+- 1,2,3,4,5 = weapon slots
+- Right Mouse hold = thrust (if enabled in settings)
+- P or Escape = pause
 - M = quick toggle mouse aim
-- Enter = next wave from shop
+- Enter = start next wave from shop
 
-Drone system
-------------
-Up to 3 active drones max, one per type:
-- Bomber Drone (AOE bombs)
-- Electricity Drone (short-range arcs + chain)
-- Laser Drone (sustained beam)
+Weapon system
+-------------
+Weapon slots:
+1) Blaster (balanced default)
+2) Rapid Blaster (fast, lower per-shot damage)
+3) Spread Cannon (multi-shot with capped spread upgrades)
+4) Laser Beam (piercing shots for tanky targets)
+5) Arc Cannon (splash burst for groups)
 
-Drones are premium shop unlocks that appear after early waves.
+Some weapons start locked and can unlock through rare drops.
 
-Shop / upgrades
+Pickups / drops
 ---------------
-Core upgrades:
-1) Rapid Fire
-2) Overcharged Rounds
-3) Velocity Rounds
-4) Scatter Cannon
-5) Reinforced Hull
-6) Recharge Shield
-7) Thruster Boost
-8) Magnet Field
-9) Salvage Bonus
-10) Emergency Repair
+Money orbs:
+- dropped by enemy kills
+- glow green and bob/float slightly
+- expire after lifetime
+- attracted by magnet radius (boosted by Magnet Field upgrade)
 
-Drone unlock upgrades:
-- Bomber Drone
-- Electricity Drone
-- Laser Drone
+Rare drops:
+- low-probability enemy drops (higher chance on stronger enemy types)
+- visually distinct diamond drops
+- expire after lifetime
+- examples: temp overcharge, fire-rate boost, shield burst, crit focus, weapon unlock cache, permanent weapon core, drone enhancement
 
-Settings (saved in localStorage)
---------------------------------
-Display
-- graphics intensity (low/medium/high)
-- glow effects
-- screen shake
-- HUD scale
+Progression model
+-----------------
+Capped upgrades:
+- high-impact upgrades like spread shots remain capped.
 
-Controls
-- mouse aim
-- mouse control mode (aim / assist)
-- hold to fire
-- right mouse thrust
-- show control hints
+Repeatable upgrades:
+- Deep Core Salvage (orb economy scaling)
+- Weapon Tuning (global weapon scaling)
+- Drone Overclock (drone scaling)
 
-Gameplay
-- auto-start next wave
-- show drone targeting lines
+This keeps late-run choices meaningful after early capped paths fill out.
 
-Accessibility
-- reduced flashes
+Persistence (localStorage keys)
+-------------------------------
+- Settings key: `neon_rift_arena_settings_v1`
+- High score key: `neon_rift_arena_high_scores_v1`
+
+High scores saved:
+- best score
+- highest wave
+- best credits earned in one run
+- best kills in one run
 
 Main tweakable constants
 ------------------------
 In `script.js`:
-- Canvas: `canvasWidth`, `canvasHeight`
-- Player: rotation/thrust/friction/max speed/fire delay/bullet stats
-- Enemy scaling: `enemyHpScalePerWave`, `enemySpeedScalePerWave`
-- Economy: kill multiplier + wave bonuses
-- Drones: max count, orbit radius, damage, cooldowns, ranges
-- Visual: glow intensity, pulse speed, color cycle speed, star density, particle scaling
-- Mouse feel: `MOUSE_AIM_DEADZONE`, `MOUSE_AIM_TURN_RATE`, `MOUSE_ASSIST_TURN_RATE`
-- Turn smoothing: `SETTINGS.maxTurnSpeed`
-- Shop layout: `SHOP_LAYOUT.maxVisibleRows`, `rowHeightPx`, `listMaxHeightPx`, `footerHeightPx`
+- `WEAPON_SLOTS`, `WEAPON_DEFS` (weapon damage/rate/speed/pierce/splash)
+- `PICKUP_SETTINGS` (orb lifetime, value scale, glow size, magnet radius, attraction)
+- `RARE_DROP_CHANCE`, `RARE_DROP_DEFS` (drop rates and effects)
+- `SETTINGS` (player/enemy/economy/drone/visual tuning)
+- `SHOP_LAYOUT` (shop rows/height/footer)
+- `HIGH_SCORE_STORAGE_KEY`, `SETTINGS_STORAGE_KEY`
 
-Input reliability notes
------------------------
-- Passive HUD uses `pointer-events: none`.
-- Only menus/shop capture pointer events.
-- Mouse tracking uses `window` + last valid canvas position.
-- Hold-fire continues while button is held (if setting enabled).
-
-Offline confirmation
---------------------
-- Uses only local HTML/CSS/JS and browser APIs.
-- Works by opening `index.html` directly.
+GitHub Pages / static hosting
+-----------------------------
+- Fully static HTML/CSS/JS.
+- No external dependencies.
+- Compatible with direct file opening and GitHub Pages hosting.
