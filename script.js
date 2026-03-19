@@ -180,7 +180,7 @@ const WEAPON_SLOTS = ['blaster', 'rapid', 'spread', 'laser', 'arc'];
 const WEAPON_DEFS = {
   blaster: { label: 'Blaster', fireDelayMs: 200, bulletDamage: 1.25, bulletSpeed: 9.3, bulletsPerShot: 1, spreadStep: 0, pierce: 0 },
   rapid: { label: 'Rapid Blaster', fireDelayMs: 95, bulletDamage: 0.62, bulletSpeed: 10.5, bulletsPerShot: 1, spreadStep: 0, pierce: 0 },
-  spread: { label: 'Spread Cannon', fireDelayMs: 235, bulletDamage: 0.92, bulletSpeed: 8.5, bulletsPerShot: 3, spreadStep: 0.17, pierce: 0 },
+  spread: { label: 'Spread Blaster', fireDelayMs: 235, bulletDamage: 0.92, bulletSpeed: 8.5, bulletsPerShot: 3, spreadStep: 0.17, pierce: 0 },
   laser: { label: 'Laser Beam', fireDelayMs: 170, bulletDamage: 0.8, bulletSpeed: 13.5, bulletsPerShot: 1, spreadStep: 0, pierce: 3 },
   arc: { label: 'Arc Cannon', fireDelayMs: 285, bulletDamage: 1.7, bulletSpeed: 8.8, bulletsPerShot: 1, spreadStep: 0, pierce: 0, splashRadius: 82 },
 };
@@ -204,66 +204,169 @@ const RARE_DROP_CHANCE = {
   turretBonus: 0.02,
 };
 
+const UTILITY_PURCHASES = {
+  hullRepairAmount: 42,
+  shieldRechargeAmount: 58,
+  emergencyRepairBaseCost: 95,
+  shieldRechargeBaseCost: 105,
+};
+
+const ENDLESS_SCALING = {
+  hpPerWave: 0.145,
+  speedPerWave: 0.075,
+  projectileSpeedPerWave: 0.04,
+  fireRatePerWave: 0.035,
+  countPerWave: 0.085,
+  eliteBaseChance: 0.02,
+  eliteChancePerWave: 0.004,
+};
+
+const SCATTER_TUNING = {
+  baseProjectiles: 3,
+  maxExtraProjectiles: 4,
+  tierDamageBonus: 0.18,
+  wideSpreadStep: 0.02,
+  denseSpreadStep: 0.012,
+  pelletVelocityBonus: 0.8,
+  piercePerTier: 1,
+};
+
+const RARE_FEEDBACK = {
+  rareTextSizePx: 26,
+  normalTextSizePx: 15,
+  extraLifeDropChance: 0.015,
+};
+
 // -------------------------------------------------
 // Upgrade/shop definitions
 // -------------------------------------------------
 const UPGRADE_DEFS = [
-  { id: 'rapidFire', name: 'Rapid Fire', key: '1', maxLevel: 6, baseCost: 70, costScale: 1.46, desc: 'Decrease fire delay', apply: () => { state.upgrades.rapidFire += 1; } },
-  { id: 'overchargedRounds', name: 'Overcharged Rounds', key: '2', maxLevel: 6, baseCost: 85, costScale: 1.5, desc: 'Increase bullet damage', apply: () => { state.upgrades.overchargedRounds += 1; } },
-  { id: 'velocityRounds', name: 'Velocity Rounds', key: '3', maxLevel: 5, baseCost: 65, costScale: 1.45, desc: 'Increase bullet speed', apply: () => { state.upgrades.velocityRounds += 1; } },
-  { id: 'scatterCannon', name: 'Scatter Cannon', key: '4', maxLevel: 2, baseCost: 150, costScale: 1.9, desc: 'Add spread projectiles', apply: () => { state.upgrades.scatterCannon += 1; } },
+  // Utility purchases (always shown)
   {
-    id: 'reinforcedHull',
-    name: 'Reinforced Hull',
-    key: '5',
-    maxLevel: 4,
-    baseCost: 125,
-    costScale: 1.58,
-    desc: '+Max health and full heal',
+    id: 'emergencyRepair',
+    name: 'Emergency Repair (Utility)',
+    key: '0',
+    category: 'utility',
+    maxLevel: null,
+    baseCost: UTILITY_PURCHASES.emergencyRepairBaseCost,
+    costScale: 1.16,
+    desc: 'Restore hull instantly',
+    isDisabled: () => state.player.health >= state.player.maxHealth,
     apply: () => {
-      state.upgrades.reinforcedHull += 1;
-      state.player.maxHealth += 25;
-      state.player.health = state.player.maxHealth;
+      state.upgrades.emergencyRepair += 1;
+      state.player.health = Math.min(state.player.maxHealth, state.player.health + UTILITY_PURCHASES.hullRepairAmount);
     },
   },
   {
     id: 'rechargeShield',
-    name: 'Recharge Shield',
-    key: '6',
-    maxLevel: 4,
-    baseCost: 130,
-    costScale: 1.58,
-    desc: '+Shield cap and regen',
+    name: 'Shield Recharge (Utility)',
+    key: '',
+    category: 'utility',
+    maxLevel: null,
+    baseCost: UTILITY_PURCHASES.shieldRechargeBaseCost,
+    costScale: 1.16,
+    desc: 'Restore shield instantly',
+    isDisabled: () => state.player.maxShield <= 0 || state.player.shield >= state.player.maxShield,
     apply: () => {
       state.upgrades.rechargeShield += 1;
-      state.player.maxShield += 20;
-      state.player.shield = state.player.maxShield;
-      state.player.shieldRegen += 1.35;
+      state.player.shield = Math.min(state.player.maxShield, state.player.shield + UTILITY_PURCHASES.shieldRechargeAmount);
     },
   },
-  { id: 'thrusterBoost', name: 'Thruster Boost', key: '7', maxLevel: 5, baseCost: 80, costScale: 1.42, desc: 'Increase thrust and top speed', apply: () => { state.upgrades.thrusterBoost += 1; } },
-  { id: 'magnetField', name: 'Magnet Field', key: '8', maxLevel: 5, baseCost: 95, costScale: 1.46, desc: 'Increase credit pickup radius', apply: () => { state.upgrades.magnetField += 1; } },
-  { id: 'salvageBonus', name: 'Salvage Bonus', key: '9', maxLevel: 5, baseCost: 105, costScale: 1.47, desc: 'Increase credits from kills', apply: () => { state.upgrades.salvageBonus += 1; } },
+
+  // One-time unlocks
+  { id: 'weaponSpreadUnlock', name: 'Unlock: Spread Blaster', key: '4', category: 'unlock', maxLevel: 1, baseCost: 170, costScale: 1, desc: 'Unlock weapon slot 3', minWave: 2, apply: () => { state.weaponUnlocks.spread = true; } },
+  { id: 'weaponLaserUnlock', name: 'Unlock: Laser Beam', key: '', category: 'unlock', maxLevel: 1, baseCost: 260, costScale: 1, desc: 'Unlock weapon slot 4', minWave: 4, apply: () => { state.weaponUnlocks.laser = true; } },
+  { id: 'weaponArcUnlock', name: 'Unlock: Arc Cannon', key: '', category: 'unlock', maxLevel: 1, baseCost: 300, costScale: 1, desc: 'Unlock weapon slot 5', minWave: 5, apply: () => { state.weaponUnlocks.arc = true; } },
+  { id: 'droneBomber', name: 'Unlock: Bomber Drone', key: '', category: 'unlock', maxLevel: 1, baseCost: 320, costScale: 1, desc: 'AOE bombs for crowds', minWave: 3, apply: () => unlockDrone('bomber') },
+  { id: 'droneElectricity', name: 'Unlock: Electricity Drone', key: '', category: 'unlock', maxLevel: 1, baseCost: 340, costScale: 1, desc: 'Arc chains nearby enemies', minWave: 4, apply: () => unlockDrone('electricity') },
+  { id: 'droneLaser', name: 'Unlock: Laser Drone', key: '', category: 'unlock', maxLevel: 1, baseCost: 360, costScale: 1, desc: 'Sustained beam vs tanks', minWave: 5, apply: () => unlockDrone('laser') },
+
+  // Capped core upgrades
+  { id: 'rapidFire', name: 'Rapid Fire', key: '1', category: 'capped', maxLevel: 6, baseCost: 70, costScale: 1.44, desc: 'Decrease fire delay', apply: () => { state.upgrades.rapidFire += 1; } },
+  { id: 'overchargedRounds', name: 'Overcharged Rounds', key: '2', category: 'capped', maxLevel: 6, baseCost: 85, costScale: 1.48, desc: 'Increase weapon damage', apply: () => { state.upgrades.overchargedRounds += 1; } },
+  { id: 'velocityRounds', name: 'Velocity Rounds', key: '3', category: 'capped', maxLevel: 5, baseCost: 70, costScale: 1.43, desc: 'Increase projectile speed', apply: () => { state.upgrades.velocityRounds += 1; } },
   {
-    id: 'emergencyRepair',
-    name: 'Emergency Repair',
-    key: '0',
-    maxLevel: 5,
-    baseCost: 90,
-    costScale: 1.4,
-    desc: 'Heal now + between-wave recovery',
+    id: 'reinforcedHull',
+    name: 'Reinforced Hull',
+    key: '5',
+    category: 'capped',
+    maxLevel: 4,
+    baseCost: 125,
+    costScale: 1.58,
+    desc: '+Max hull and full heal',
     apply: () => {
-      state.upgrades.emergencyRepair += 1;
-      state.player.health = Math.min(state.player.maxHealth, state.player.health + 35);
+      state.upgrades.reinforcedHull += 1;
+      state.player.maxHealth += 24;
+      state.player.health = state.player.maxHealth;
     },
   },
-  // Drone unlocks (premium, appear after early waves)
-  { id: 'droneBomber', name: 'Bomber Drone', key: '', maxLevel: 1, baseCost: 300, costScale: 1, desc: 'AOE bombs for crowds', minWave: 3, apply: () => unlockDrone('bomber') },
-  { id: 'droneElectricity', name: 'Electricity Drone', key: '', maxLevel: 1, baseCost: 320, costScale: 1, desc: 'Arc chains nearby enemies', minWave: 4, apply: () => unlockDrone('electricity') },
-  { id: 'droneLaser', name: 'Laser Drone', key: '', maxLevel: 1, baseCost: 340, costScale: 1, desc: 'Sustained beam vs tanks', minWave: 5, apply: () => unlockDrone('laser') },
-  { id: 'deepCoreSalvage', name: 'Deep Core Salvage', key: '', maxLevel: null, baseCost: 160, costScale: 1.27, desc: 'Repeatable: +credits from all orbs', minWave: 3, apply: () => { state.upgrades.deepCoreSalvage += 1; } },
-  { id: 'weaponTuning', name: 'Weapon Tuning', key: '', maxLevel: null, baseCost: 175, costScale: 1.28, desc: 'Repeatable: +global weapon damage', minWave: 4, apply: () => { state.upgrades.weaponTuning += 1; } },
-  { id: 'droneOverclock', name: 'Drone Overclock', key: '', maxLevel: null, baseCost: 185, costScale: 1.31, desc: 'Repeatable: +drone damage output', minWave: 5, apply: () => { state.upgrades.droneOverclock += 1; } },
+  {
+    id: 'shieldMatrix',
+    name: 'Shield Matrix',
+    key: '6',
+    category: 'capped',
+    maxLevel: 5,
+    baseCost: 135,
+    costScale: 1.52,
+    desc: '+Shield cap and regen',
+    apply: () => {
+      state.upgrades.shieldMatrix += 1;
+      state.player.maxShield += 18;
+      state.player.shield = state.player.maxShield;
+      state.player.shieldRegen += 1.2;
+    },
+  },
+  { id: 'thrusterBoost', name: 'Thruster Boost', key: '7', category: 'capped', maxLevel: 6, baseCost: 82, costScale: 1.4, desc: 'Increase thrust and top speed', apply: () => { state.upgrades.thrusterBoost += 1; } },
+
+  // Weapon-specific (Spread Blaster) tiered upgrades
+  {
+    id: 'scatterTier1',
+    name: 'Spread Blaster: Scatter Tier I',
+    key: '',
+    category: 'weapon',
+    maxLevel: 1,
+    baseCost: 130,
+    costScale: 1,
+    desc: '+Spread weapon damage',
+    isVisible: () => state.weaponUnlocks.spread,
+    apply: () => { state.upgrades.scatterTier1 += 1; },
+  },
+  {
+    id: 'scatterTier2',
+    name: 'Spread Blaster: Scatter Tier II',
+    key: '',
+    category: 'weapon',
+    maxLevel: 1,
+    baseCost: 185,
+    costScale: 1,
+    desc: 'More spread weapon damage',
+    isVisible: () => state.weaponUnlocks.spread && state.upgrades.scatterTier1 > 0,
+    apply: () => { state.upgrades.scatterTier2 += 1; },
+  },
+  {
+    id: 'scatterTier3',
+    name: 'Spread Blaster: Scatter Tier III',
+    key: '',
+    category: 'weapon',
+    maxLevel: 1,
+    baseCost: 260,
+    costScale: 1,
+    desc: 'Max spread weapon damage tier',
+    isVisible: () => state.weaponUnlocks.spread && state.upgrades.scatterTier2 > 0,
+    apply: () => { state.upgrades.scatterTier3 += 1; },
+  },
+  { id: 'scatterWide', name: 'Spread Blaster: Wide Spread', key: '', category: 'weapon', maxLevel: 4, baseCost: 120, costScale: 1.35, desc: 'Wider angle coverage', isVisible: () => state.weaponUnlocks.spread, apply: () => { state.upgrades.scatterWide += 1; } },
+  { id: 'scatterDense', name: 'Spread Blaster: Dense Spread', key: '', category: 'weapon', maxLevel: 3, baseCost: 170, costScale: 1.45, desc: 'Extra pellets (capped)', isVisible: () => state.weaponUnlocks.spread && state.wave >= 4, apply: () => { state.upgrades.scatterDense += 1; } },
+  { id: 'scatterVelocity', name: 'Spread Blaster: Pellet Velocity', key: '', category: 'weapon', maxLevel: null, baseCost: 145, costScale: 1.25, desc: 'Repeatable pellet speed scaling', isVisible: () => state.weaponUnlocks.spread, apply: () => { state.upgrades.scatterVelocity += 1; } },
+  { id: 'scatterPierce', name: 'Spread Blaster: Piercing Pellets', key: '', category: 'weapon', maxLevel: 2, baseCost: 240, costScale: 1.55, desc: 'Pellets can pierce targets', isVisible: () => state.weaponUnlocks.spread && state.upgrades.scatterTier2 > 0, apply: () => { state.upgrades.scatterPierce += 1; } },
+
+  // Infinite / soft-scaling upgrades
+  { id: 'magnetField', name: 'Magnet Field', key: '8', category: 'infinite', maxLevel: null, baseCost: 95, costScale: 1.24, desc: 'Repeatable pickup radius and pull', apply: () => { state.upgrades.magnetField += 1; } },
+  { id: 'salvageBonus', name: 'Salvage Bonus', key: '9', category: 'infinite', maxLevel: null, baseCost: 105, costScale: 1.24, desc: 'Repeatable credits gain', apply: () => { state.upgrades.salvageBonus += 1; } },
+  { id: 'deepCoreSalvage', name: 'Deep Core Salvage', key: '', category: 'infinite', maxLevel: null, baseCost: 160, costScale: 1.24, desc: 'Repeatable orb value scaling', minWave: 3, apply: () => { state.upgrades.deepCoreSalvage += 1; } },
+  { id: 'weaponTuning', name: 'Weapon Tuning', key: '', category: 'infinite', maxLevel: null, baseCost: 175, costScale: 1.25, desc: 'Repeatable global weapon scaling', minWave: 4, apply: () => { state.upgrades.weaponTuning += 1; } },
+  { id: 'droneOverclock', name: 'Drone Overclock', key: '', category: 'infinite', maxLevel: null, baseCost: 185, costScale: 1.26, desc: 'Repeatable drone damage scaling', minWave: 5, isVisible: () => state.drones.length > 0, apply: () => { state.upgrades.droneOverclock += 1; } },
+  { id: 'droneCooldown', name: 'Drone Cooldown Tuning', key: '', category: 'infinite', maxLevel: null, baseCost: 170, costScale: 1.23, desc: 'Repeatable drone fire-rate scaling', minWave: 6, isVisible: () => state.drones.length > 0, apply: () => { state.upgrades.droneCooldown += 1; } },
 ];
 
 const RARE_DROP_DEFS = [
@@ -274,6 +377,7 @@ const RARE_DROP_DEFS = [
   { id: 'dronePulse', name: 'Drone Enhancement', color: '#ffa66f', chanceWeight: 0.8, apply: () => { state.runBonuses.droneDamageMultiplier += 0.25; state.runBonuses.dronePowerUntil = performance.now() + 14000; } },
   { id: 'critFocus', name: 'Critical Focus', color: '#ff7ebd', chanceWeight: 0.85, apply: () => { state.runBonuses.critChance += 0.12; state.runBonuses.critUntil = performance.now() + 12000; } },
   { id: 'weaponCore', name: 'Weapon Core +', color: '#fff', chanceWeight: 0.62, apply: () => { state.runBonuses.permanentWeaponBonus += 0.12; } },
+  { id: 'extraLife', name: 'Extra Life Core', color: '#ffe58a', chanceWeight: 0.12, apply: () => { state.player.lives += 1; } },
 ];
 
 const AUDIO_LIMITS = {
@@ -417,8 +521,13 @@ const audio = {
     if (name === 'shield_hit') this.tone({ type: 'triangle', freq: 900, freqEnd: 420, duration: 0.1, gain: 0.065, pan: 0.1 });
     if (name === 'pickup_money') this.tone({ type: 'sine', freq: 700, freqEnd: 1020, duration: 0.08, gain: 0.055, pan });
     if (name === 'pickup_rare') {
-      this.tone({ type: 'sine', freq: 620, freqEnd: 980, duration: 0.11, gain: 0.07, pan });
-      this.tone({ type: 'triangle', freq: 980, freqEnd: 1400, duration: 0.09, gain: 0.045, pan });
+      this.tone({ type: 'sine', freq: 620, freqEnd: 980, duration: 0.13, gain: 0.1, pan });
+      this.tone({ type: 'triangle', freq: 980, freqEnd: 1400, duration: 0.11, gain: 0.07, pan });
+      this.noiseBurst({ duration: 0.1, gain: 0.035, pan });
+    }
+    if (name === 'pickup_life') {
+      this.tone({ type: 'triangle', freq: 540, freqEnd: 900, duration: 0.14, gain: 0.12, pan });
+      this.tone({ type: 'sine', freq: 900, freqEnd: 1480, duration: 0.2, gain: 0.09, pan });
     }
     if (name === 'shop_buy') this.tone({ type: 'sine', freq: 580, freqEnd: 860, duration: 0.1, gain: 0.06, pan });
     if (name === 'wave_clear') {
@@ -531,6 +640,8 @@ const state = {
   lastShotAt: 0,
   lastFrameTime: performance.now(),
   shake: 0,
+  rareFlash: 0,
+  rareFlashColor: '#ffffff',
 
   autoNextWaveAt: null,
   highScores: {
@@ -544,13 +655,23 @@ const state = {
     rapidFire: 0,
     overchargedRounds: 0,
     velocityRounds: 0,
-    scatterCannon: 0,
+    weaponSpreadUnlock: 0,
+    weaponLaserUnlock: 0,
+    weaponArcUnlock: 0,
     reinforcedHull: 0,
     rechargeShield: 0,
+    shieldMatrix: 0,
     thrusterBoost: 0,
     magnetField: 0,
     salvageBonus: 0,
     emergencyRepair: 0,
+    scatterTier1: 0,
+    scatterTier2: 0,
+    scatterTier3: 0,
+    scatterWide: 0,
+    scatterDense: 0,
+    scatterVelocity: 0,
+    scatterPierce: 0,
 
     droneBomber: 0,
     droneElectricity: 0,
@@ -558,6 +679,7 @@ const state = {
     deepCoreSalvage: 0,
     weaponTuning: 0,
     droneOverclock: 0,
+    droneCooldown: 0,
   },
   currentWeaponSlot: 1,
   weaponUnlocks: {
@@ -723,12 +845,13 @@ function applySettingsToUI() {
   buildStars();
 }
 
-function addPickupLabel(text, x, y, color = '#eafff5') {
+function addPickupLabel(text, x, y, color = '#eafff5', emphasis = 'normal') {
   state.pickupLabels.push({
     text,
     x,
     y,
     color,
+    emphasis,
     vy: -0.44,
     life: 900,
     maxLife: 900,
@@ -758,6 +881,17 @@ function pickupPullStrength() {
 }
 function salvageMultiplier() {
   return 1 + state.upgrades.salvageBonus * 0.18 + state.upgrades.deepCoreSalvage * 0.08;
+}
+function waveScale(wave = state.wave) {
+  const w = Math.max(1, wave);
+  return {
+    hp: 1 + (w - 1) * ENDLESS_SCALING.hpPerWave,
+    speed: 1 + (w - 1) * ENDLESS_SCALING.speedPerWave,
+    projectile: 1 + (w - 1) * ENDLESS_SCALING.projectileSpeedPerWave,
+    fireRate: 1 + (w - 1) * ENDLESS_SCALING.fireRatePerWave,
+    count: 1 + (w - 1) * ENDLESS_SCALING.countPerWave,
+    eliteChance: clamp(ENDLESS_SCALING.eliteBaseChance + (w - 1) * ENDLESS_SCALING.eliteChancePerWave, 0, 0.38),
+  };
 }
 function weaponDamageMultiplier() {
   return 1
@@ -809,32 +943,36 @@ function createPlayer() {
 
 function createEnemy(typeId, x, y, wave) {
   const def = ENEMY_TYPES[typeId];
-  const hpScale = 1 + (wave - 1) * SETTINGS.enemyHpScalePerWave;
-  const speedScale = 1 + (wave - 1) * SETTINGS.enemySpeedScalePerWave;
+  const scale = waveScale(wave);
   const angle = rand(0, Math.PI * 2);
 
   let vx = 0;
   let vy = 0;
   if (typeId === 'driftRock' || typeId === 'splitterCore') {
-    vx = Math.cos(angle) * def.speed * speedScale;
-    vy = Math.sin(angle) * def.speed * speedScale;
+    vx = Math.cos(angle) * def.speed * scale.speed;
+    vy = Math.sin(angle) * def.speed * scale.speed;
   }
+
+  const elite = Math.random() < scale.eliteChance;
+  const eliteHpMult = elite ? 1.6 : 1;
+  const eliteSpeedMult = elite ? 1.12 : 1;
 
   return {
     typeId,
     x,
     y,
-    vx,
-    vy,
+    vx: vx * eliteSpeedMult,
+    vy: vy * eliteSpeedMult,
     angle,
     spin: rand(-0.02, 0.02),
     radius: def.radius,
-    hp: Math.ceil(def.hp * hpScale),
-    maxHp: Math.ceil(def.hp * hpScale),
-    scoreValue: def.score,
-    creditValue: Math.round(def.credits * (1 + (wave - 1) * 0.08)),
-    shootCooldown: rand(900, 1550),
+    hp: Math.ceil(def.hp * scale.hp * eliteHpMult),
+    maxHp: Math.ceil(def.hp * scale.hp * eliteHpMult),
+    scoreValue: Math.round(def.score * (elite ? 1.6 : 1)),
+    creditValue: Math.round(def.credits * (1 + (wave - 1) * 0.08) * (elite ? 1.55 : 1)),
+    shootCooldown: rand(900, 1550) / scale.fireRate / (elite ? 1.1 : 1),
     lastShotAt: 0,
+    elite,
   };
 }
 
@@ -858,14 +996,15 @@ function createPlayerBullet(offsetAngle = 0, weaponId = activeWeaponId()) {
 }
 
 function createEnemyBullet(enemy, angleToPlayer) {
-  const speed = 3.4 + state.wave * 0.08;
+  const scale = waveScale();
+  const speed = (3.4 + state.wave * 0.08) * scale.projectile * (enemy.elite ? 1.1 : 1);
   return {
     x: enemy.x,
     y: enemy.y,
     vx: Math.cos(angleToPlayer) * speed,
     vy: Math.sin(angleToPlayer) * speed,
     radius: 3.6,
-    damage: 12 + state.wave,
+    damage: (12 + state.wave) * (enemy.elite ? 1.12 : 1),
     life: 2200,
   };
 }
@@ -890,6 +1029,21 @@ function spawnRareDrop(x, y, enemyTypeId) {
   if (enemyTypeId === 'bulwark') chance += RARE_DROP_CHANCE.bulwarkBonus;
   if (enemyTypeId === 'splitterCore') chance += RARE_DROP_CHANCE.splitterBonus;
   if (enemyTypeId === 'pulseTurret') chance += RARE_DROP_CHANCE.turretBonus;
+  const lifeBoost = enemyTypeId === 'bulwark' || enemyTypeId === 'pulseTurret' ? 1.8 : 1;
+  if (Math.random() < RARE_FEEDBACK.extraLifeDropChance * lifeBoost) {
+    state.rareDrops.push({
+      id: 'extraLife',
+      x,
+      y,
+      vx: rand(-0.3, 0.3),
+      vy: rand(-0.3, 0.3),
+      radius: 9,
+      life: PICKUP_SETTINGS.rareDropLifetimeMs,
+      color: '#ffe58a',
+      label: 'EXTRA LIFE +1',
+    });
+    return;
+  }
   if (Math.random() > chance) return;
 
   const totalWeight = RARE_DROP_DEFS.reduce((sum, d) => sum + d.chanceWeight, 0);
@@ -917,12 +1071,12 @@ function unlockRandomWeapon() {
   const locked = WEAPON_SLOTS.filter((id) => !state.weaponUnlocks[id]);
   if (locked.length === 0) {
     state.credits += 45;
-    addPickupLabel('+45 bonus credits', state.player.x, state.player.y - 20, '#9effa7');
+    addPickupLabel('+45 bonus credits', state.player.x, state.player.y - 20, '#9effa7', 'rare');
     return;
   }
   const pick = locked[Math.floor(rand(0, locked.length))];
   state.weaponUnlocks[pick] = true;
-  addPickupLabel(`Unlocked ${WEAPON_DEFS[pick].label}`, state.player.x, state.player.y - 20, '#f8d7ff');
+  addPickupLabel(`Unlocked ${WEAPON_DEFS[pick].label}`, state.player.x, state.player.y - 20, '#f8d7ff', 'rare');
 }
 
 // -------------------------------------------------
@@ -980,6 +1134,7 @@ function applyDamageToEnemyRef(enemyRef, dmg) {
 function updateDrones(dtMs, now) {
   const p = state.player;
   const droneMult = 1 + state.upgrades.droneOverclock * 0.12 + state.runBonuses.droneDamageMultiplier;
+  const cooldownMult = Math.max(0.45, 1 - state.upgrades.droneCooldown * 0.04);
   state.beamEffects = [];
   state.arcEffects = [];
 
@@ -1022,7 +1177,7 @@ function updateDrones(dtMs, now) {
             damage: SETTINGS.bomberDamage * droneMult,
             aoe: SETTINGS.bomberAoeRadius,
           });
-          drone.cooldown = SETTINGS.bomberCooldownMs;
+          drone.cooldown = SETTINGS.bomberCooldownMs * cooldownMult;
         }
       }
     }
@@ -1043,7 +1198,7 @@ function updateDrones(dtMs, now) {
             state.arcEffects.push({ x1: primary.x, y1: primary.y, x2: chainTarget.x, y2: chainTarget.y, life: 120 });
           }
 
-          drone.cooldown = SETTINGS.electricityCooldownMs;
+          drone.cooldown = SETTINGS.electricityCooldownMs * cooldownMult;
         }
       }
     }
@@ -1133,6 +1288,8 @@ function resetRun() {
   state.damageTakenThisWave = 0;
   state.lastShotAt = 0;
   state.shake = 0;
+  state.rareFlash = 0;
+  state.rareFlashColor = '#ffffff';
   state.autoNextWaveAt = null;
   state.currentWeaponSlot = 1;
   state.weaponUnlocks = {
@@ -1380,12 +1537,15 @@ function randomEdgePoint() {
 
 function spawnWave(wave) {
   state.enemies = [];
+  const scale = waveScale(wave);
+  const complexity = 1 + Math.floor(Math.max(0, wave - 4) / 4);
+  const countScale = scale.count * (1 + complexity * 0.08);
 
-  const driftCount = 3 + Math.floor(wave * 0.9);
-  const dartCount = Math.max(0, Math.floor((wave - 1) * 0.85));
-  const bulwarkCount = Math.max(0, Math.floor((wave - 2) * 0.35));
-  const splitterCount = Math.max(0, Math.floor((wave - 2) * 0.45));
-  const turretCount = Math.max(0, Math.floor((wave - 3) * 0.55));
+  const driftCount = Math.floor((3 + wave * 0.9) * countScale);
+  const dartCount = Math.max(0, Math.floor((wave - 1) * 0.85 * countScale));
+  const bulwarkCount = Math.max(0, Math.floor((wave - 2) * 0.35 * (0.8 + complexity * 0.15)));
+  const splitterCount = Math.max(0, Math.floor((wave - 2) * 0.45 * (0.85 + complexity * 0.12)));
+  const turretCount = Math.max(0, Math.floor((wave - 3) * 0.55 * (0.8 + complexity * 0.15)));
 
   for (let i = 0; i < driftCount; i++) {
     const p = randomEdgePoint();
@@ -1421,19 +1581,29 @@ function shootPlayer() {
 
   const weapon = activeWeaponDef();
   let bulletsPerShot = weapon.bulletsPerShot;
+  let spreadStep = weapon.spreadStep;
+  let extraPierce = 0;
 
   if (weaponId === 'spread') {
-    const extra = Math.min(2, state.upgrades.scatterCannon);
-    bulletsPerShot += extra;
+    const damageTier = state.upgrades.scatterTier1 + state.upgrades.scatterTier2 + state.upgrades.scatterTier3;
+    bulletsPerShot += Math.min(SCATTER_TUNING.maxExtraProjectiles, state.upgrades.scatterDense);
+    spreadStep += state.upgrades.scatterWide * SCATTER_TUNING.wideSpreadStep;
+    spreadStep = Math.max(0.06, spreadStep - state.upgrades.scatterDense * SCATTER_TUNING.denseSpreadStep);
+    extraPierce = state.upgrades.scatterPierce * SCATTER_TUNING.piercePerTier;
   }
 
   if (bulletsPerShot <= 1) {
     state.bullets.push(createPlayerBullet(0, weaponId));
   } else {
-    const totalArc = weapon.spreadStep * (bulletsPerShot - 1);
+    const totalArc = spreadStep * (bulletsPerShot - 1);
     for (let i = 0; i < bulletsPerShot; i++) {
-      const offset = -totalArc / 2 + i * weapon.spreadStep;
-      state.bullets.push(createPlayerBullet(offset, weaponId));
+      const offset = -totalArc / 2 + i * spreadStep;
+      const pellet = createPlayerBullet(offset, weaponId);
+      pellet.pierce += extraPierce;
+      pellet.vx *= 1 + state.upgrades.scatterVelocity * (SCATTER_TUNING.pelletVelocityBonus * 0.05);
+      pellet.vy *= 1 + state.upgrades.scatterVelocity * (SCATTER_TUNING.pelletVelocityBonus * 0.05);
+      pellet.damage *= 1 + (state.upgrades.scatterTier1 + state.upgrades.scatterTier2 + state.upgrades.scatterTier3) * SCATTER_TUNING.tierDamageBonus;
+      state.bullets.push(pellet);
     }
   }
 
@@ -1519,6 +1689,7 @@ function updatePlayer(dtMs, now) {
 }
 
 function updateEnemies(now) {
+  const scale = waveScale();
   for (const e of state.enemies) {
     const dx = state.player.x - e.x;
     const dy = state.player.y - e.y;
@@ -1535,7 +1706,7 @@ function updateEnemies(now) {
     }
 
     if (e.typeId === 'dartScout') {
-      const sp = ENEMY_TYPES.dartScout.speed * (1 + (state.wave - 1) * SETTINGS.enemySpeedScalePerWave);
+      const sp = ENEMY_TYPES.dartScout.speed * scale.speed * (e.elite ? 1.12 : 1);
       e.vx = nx * sp;
       e.vy = ny * sp;
       e.x += e.vx;
@@ -1545,7 +1716,7 @@ function updateEnemies(now) {
     }
 
     if (e.typeId === 'bulwark') {
-      const sp = ENEMY_TYPES.bulwark.speed * (1 + (state.wave - 1) * SETTINGS.enemySpeedScalePerWave * 0.7);
+      const sp = ENEMY_TYPES.bulwark.speed * scale.speed * 0.82 * (e.elite ? 1.08 : 1);
       e.vx = nx * sp;
       e.vy = ny * sp;
       e.x += e.vx;
@@ -1556,7 +1727,7 @@ function updateEnemies(now) {
 
     if (e.typeId === 'pulseTurret') {
       const desired = 250;
-      const sp = ENEMY_TYPES.pulseTurret.speed * (1 + (state.wave - 1) * SETTINGS.enemySpeedScalePerWave * 0.6);
+      const sp = ENEMY_TYPES.pulseTurret.speed * scale.speed * 0.72 * (e.elite ? 1.1 : 1);
       if (dist > desired) {
         e.vx = nx * sp;
         e.vy = ny * sp;
@@ -1657,9 +1828,13 @@ function updatePickups(dtMs) {
     if (dist < p.radius + drop.radius + 4) {
       const def = RARE_DROP_DEFS.find((d) => d.id === drop.id);
       if (def) def.apply();
-      addPickupLabel(drop.label, drop.x, drop.y, drop.color);
-      addExplosion(drop.x, drop.y, drop.color, 12, 24);
-      audio.play('pickup_rare', { pan: clamp((drop.x / canvas.width) * 2 - 1, -1, 1) });
+      addPickupLabel(drop.label, drop.x, drop.y, drop.color, 'rare');
+      const isLife = drop.id === 'extraLife';
+      addExplosion(drop.x, drop.y, drop.color, isLife ? 24 : 18, isLife ? 48 : 34);
+      maybeShake(isLife ? 8 : 5);
+      state.rareFlash = isLife ? 0.42 : 0.28;
+      state.rareFlashColor = drop.color;
+      audio.play(isLife ? 'pickup_life' : 'pickup_rare', { pan: clamp((drop.x / canvas.width) * 2 - 1, -1, 1) });
       state.rareDrops.splice(i, 1);
       continue;
     }
@@ -1694,6 +1869,7 @@ function updateFx(dtMs) {
   }
 
   state.shake = Math.max(0, state.shake - dtMs * 0.035);
+  state.rareFlash = Math.max(0, state.rareFlash - dtMs * 0.0024);
 }
 
 function updateRunBonuses(now) {
@@ -1878,6 +2054,7 @@ function upgradeCost(def) {
 
 function canShowUpgrade(def) {
   if (def.minWave && state.wave < def.minWave) return false;
+  if (def.isVisible && !def.isVisible()) return false;
   return true;
 }
 
@@ -1886,6 +2063,7 @@ function buyUpgrade(id) {
 
   const def = UPGRADE_DEFS.find((u) => u.id === id);
   if (!def || !canShowUpgrade(def)) return;
+  if (def.isDisabled && def.isDisabled()) return;
 
   if (def.maxLevel !== null && upgradeLevel(def.id) >= def.maxLevel) return;
   const cost = upgradeCost(def);
@@ -1914,21 +2092,41 @@ function buyUpgrade(id) {
 function buildShopButtons() {
   shopButtonsEl.innerHTML = '';
   shopCreditsEl.textContent = String(state.credits);
+  const order = ['utility', 'unlock', 'capped', 'weapon', 'infinite'];
+  const visible = UPGRADE_DEFS.filter(canShowUpgrade);
+  order.forEach((category) => {
+    const group = visible.filter((u) => (u.category || 'capped') === category);
+    if (group.length === 0) return;
 
-  UPGRADE_DEFS.filter(canShowUpgrade).forEach((def) => {
+    const heading = document.createElement('div');
+    heading.className = 'shop-group-heading';
+    heading.textContent = category === 'utility'
+      ? 'Utility Purchases'
+      : category === 'unlock'
+        ? 'One-Time Unlocks'
+        : category === 'capped'
+          ? 'Capped Upgrades'
+          : category === 'weapon'
+            ? 'Spread Blaster Upgrades'
+            : 'Infinite Scaling Upgrades';
+    shopButtonsEl.appendChild(heading);
+
+    group.forEach((def) => {
     const lvl = upgradeLevel(def.id);
     const cost = upgradeCost(def);
     const capped = def.maxLevel !== null && lvl >= def.maxLevel;
+    const disabledByState = def.isDisabled ? def.isDisabled() : false;
 
     const btn = document.createElement('button');
     btn.className = 'shop-btn';
-    btn.disabled = capped || state.credits < cost;
+    btn.disabled = capped || disabledByState || state.credits < cost;
 
     btn.innerHTML = `
       <div><strong>${def.name}</strong></div>
       <div>${def.desc}</div>
-      <div class="cost">Cost: ${capped ? 'MAX' : cost}</div>
+      <div class="cost">Cost: ${capped ? 'MAX' : disabledByState ? 'N/A (full)' : cost}</div>
       <div class="owned">Tier: ${def.maxLevel === null ? `${lvl} (repeatable)` : `${lvl}/${def.maxLevel}`}</div>
+      <div class="owned">Type: ${def.category || 'core'}</div>
     `;
 
     btn.addEventListener('mouseenter', () => {
@@ -1936,6 +2134,7 @@ function buildShopButtons() {
     });
     btn.addEventListener('click', () => buyUpgrade(def.id));
     shopButtonsEl.appendChild(btn);
+  });
   });
 }
 
@@ -2034,9 +2233,9 @@ window.addEventListener('keydown', (event) => {
       '1': 'rapidFire',
       '2': 'overchargedRounds',
       '3': 'velocityRounds',
-      '4': 'scatterCannon',
+      '4': 'weaponSpreadUnlock',
       '5': 'reinforcedHull',
-      '6': 'rechargeShield',
+      '6': 'shieldMatrix',
       '7': 'thrusterBoost',
       '8': 'magnetField',
       '9': 'salvageBonus',
@@ -2273,6 +2472,13 @@ function drawEnemies(now) {
     ctx.lineTo(-e.radius + e.radius * 2 * hpPct, -e.radius - 7);
     ctx.stroke();
 
+    if (e.elite) {
+      neonStroke('rgba(255, 229, 138, 0.8)', 1.6, 10);
+      ctx.beginPath();
+      ctx.arc(0, 0, e.radius + 5, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
     ctx.restore();
   }
 
@@ -2348,21 +2554,37 @@ function drawPickups(now) {
   for (const drop of state.rareDrops) {
     const blink = 0.72 + 0.28 * Math.sin(now * 0.012 + drop.x * 0.01);
     const size = drop.radius * blink;
-    ctx.save();
-    ctx.translate(drop.x, drop.y);
-    ctx.rotate(now * 0.0028);
-    ctx.strokeStyle = drop.color;
-    ctx.lineWidth = 2;
-    ctx.shadowColor = drop.color;
-    ctx.shadowBlur = 16 * glowScale();
-    ctx.beginPath();
-    ctx.moveTo(0, -size);
-    ctx.lineTo(size, 0);
-    ctx.lineTo(0, size);
-    ctx.lineTo(-size, 0);
-    ctx.closePath();
-    ctx.stroke();
-    ctx.restore();
+    if (drop.id === 'extraLife') {
+      ctx.fillStyle = '#ffe58a';
+      ctx.shadowColor = '#ffe58a';
+      ctx.shadowBlur = 22 * glowScale();
+      ctx.beginPath();
+      ctx.ellipse(drop.x, drop.y, size * 0.8, size * 1.08, now * 0.003, 0, Math.PI * 2);
+      ctx.fill();
+      neonStroke('rgba(255,239,150,0.95)', 2.2, 12);
+      ctx.beginPath();
+      ctx.moveTo(drop.x - size * 0.35, drop.y);
+      ctx.lineTo(drop.x + size * 0.35, drop.y);
+      ctx.moveTo(drop.x, drop.y - size * 0.35);
+      ctx.lineTo(drop.x, drop.y + size * 0.35);
+      ctx.stroke();
+    } else {
+      ctx.save();
+      ctx.translate(drop.x, drop.y);
+      ctx.rotate(now * 0.0028);
+      ctx.strokeStyle = drop.color;
+      ctx.lineWidth = 2;
+      ctx.shadowColor = drop.color;
+      ctx.shadowBlur = 16 * glowScale();
+      ctx.beginPath();
+      ctx.moveTo(0, -size);
+      ctx.lineTo(size, 0);
+      ctx.lineTo(0, size);
+      ctx.lineTo(-size, 0);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   ctx.shadowBlur = 0;
@@ -2456,7 +2678,9 @@ function renderPickupLabels() {
     const px = (label.x / canvas.width) * rect.width;
     const py = (label.y / canvas.height) * rect.height;
     const alpha = clamp(label.life / label.maxLife, 0, 1);
-    return `<div class="pickup-label" style="left:${px}px;top:${py}px;color:${label.color};opacity:${alpha.toFixed(2)};">${label.text}</div>`;
+    const size = label.emphasis === 'rare' ? RARE_FEEDBACK.rareTextSizePx : RARE_FEEDBACK.normalTextSizePx;
+    const cls = label.emphasis === 'rare' ? 'pickup-label pickup-label-rare' : 'pickup-label';
+    return `<div class="${cls}" style="left:${px}px;top:${py}px;color:${label.color};font-size:${size}px;opacity:${alpha.toFixed(2)};">${label.text}</div>`;
   }).join('');
 }
 
@@ -2480,6 +2704,15 @@ function drawCrosshair() {
   ctx.shadowBlur = 0;
 }
 
+function drawRareFlash() {
+  if (state.rareFlash <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = state.rareFlash;
+  ctx.fillStyle = state.rareFlashColor;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.restore();
+}
+
 function draw(now) {
   ctx.save();
 
@@ -2497,6 +2730,7 @@ function draw(now) {
   drawPlayer(now);
   drawCrosshair();
   drawWaveBanner();
+  drawRareFlash();
   renderPickupLabels();
 
   ctx.restore();
