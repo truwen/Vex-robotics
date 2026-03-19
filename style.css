@@ -1,0 +1,278 @@
+:root {
+  --bg-1: #050710;
+  --bg-2: #090f23;
+  --neon-cyan: #63e9ff;
+  --neon-blue: #6da1ff;
+  --neon-magenta: #ff6de2;
+  --neon-green: #79ffbc;
+  --panel-bg: rgba(7, 13, 30, 0.72);
+  --panel-border: rgba(99, 233, 255, 0.45);
+  --text: #e9f6ff;
+
+  /* Shop layout tuning constants */
+  --shop-max-visible-rows: 6;
+  --shop-row-height: 80px;
+  --shop-row-gap: 9px;
+  --shop-list-max-height: 525px;
+  --shop-footer-height: 78px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 20% 15%, rgba(100, 70, 200, 0.18), transparent 35%),
+    radial-gradient(circle at 85% 10%, rgba(20, 160, 240, 0.18), transparent 32%),
+    linear-gradient(180deg, var(--bg-2), var(--bg-1));
+  color: var(--text);
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+.game-wrap {
+  position: relative;
+  width: min(99vw, 1460px);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow:
+    0 0 0 1px rgba(109, 161, 255, 0.35),
+    0 0 35px rgba(25, 75, 150, 0.45),
+    0 0 60px rgba(0, 0, 0, 0.7);
+}
+
+#gameCanvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: #02030a;
+}
+
+/* Passive panels: don't capture gameplay mouse events */
+.hud,
+.controls-panel,
+.upgrades-panel {
+  pointer-events: none;
+  user-select: none;
+  position: absolute;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  backdrop-filter: blur(2px);
+  text-shadow: 0 0 10px rgba(99, 233, 255, 0.35);
+  transform-origin: top left;
+}
+
+.hud {
+  left: 12px;
+  top: 12px;
+  right: 320px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-size: 0.93rem;
+}
+
+.hud strong {
+  color: var(--neon-cyan);
+  font-weight: 600;
+  margin-right: 5px;
+}
+
+.controls-panel {
+  right: 12px;
+  top: 12px;
+  width: 295px;
+  font-size: 0.87rem;
+}
+
+.controls-panel.hidden {
+  display: none;
+}
+
+.controls-panel h2,
+.upgrades-panel h2 {
+  margin: 0 0 7px;
+  font-size: 1rem;
+  color: var(--neon-cyan);
+}
+
+.controls-panel ul,
+.upgrades-panel ul {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.controls-panel li,
+.upgrades-panel li {
+  margin: 4px 0;
+}
+
+.upgrades-panel {
+  left: 12px;
+  top: 92px;
+  width: 360px;
+  max-height: 250px;
+  overflow: auto;
+  font-size: 0.85rem;
+}
+
+/* Menus and shop are interactive */
+.overlay,
+.shop-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.62);
+  pointer-events: auto;
+}
+
+.overlay.hidden,
+.shop-overlay.hidden {
+  display: none;
+}
+
+.menu-card,
+.shop-card {
+  width: min(92vw, 920px);
+  background: rgba(8, 14, 32, 0.95);
+  border: 1px solid rgba(109, 161, 255, 0.5);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 0 24px rgba(30, 80, 180, 0.4);
+}
+
+#menuTitle {
+  margin: 0;
+  letter-spacing: 0.08em;
+  font-size: clamp(1.8rem, 4.5vw, 3rem);
+  color: #d7efff;
+  text-shadow: 0 0 12px rgba(99, 233, 255, 0.65), 0 0 24px rgba(255, 109, 226, 0.35);
+}
+
+#menuText {
+  margin: 10px auto 14px;
+  max-width: 760px;
+  line-height: 1.4;
+}
+
+.menu-buttons {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+}
+
+.menu-btn {
+  min-width: 260px;
+  padding: 10px 14px;
+  border-radius: 9px;
+  border: 1px solid rgba(99, 233, 255, 0.65);
+  background: linear-gradient(180deg, #1c3a5e, #152c46);
+  color: #fff;
+  cursor: pointer;
+}
+
+.menu-btn:hover {
+  box-shadow: 0 0 12px rgba(99, 233, 255, 0.3);
+}
+
+.subtle {
+  color: #a8bfdc;
+  font-size: 0.92rem;
+}
+
+.shop-card h2 {
+  margin: 0 0 8px;
+  color: var(--neon-cyan);
+}
+
+.shop-card {
+  max-height: min(86vh, 760px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) var(--shop-footer-height);
+  overflow: hidden;
+}
+
+.shop-header {
+  padding-bottom: 4px;
+}
+
+.shop-buttons {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(280px, 1fr));
+  gap: 9px;
+  margin: 12px 0;
+  text-align: left;
+  align-content: start;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  max-height: var(--shop-list-max-height);
+  padding-right: 6px;
+}
+
+.shop-btn {
+  background: linear-gradient(180deg, rgba(19, 39, 64, 0.92), rgba(10, 24, 40, 0.92));
+  color: var(--text);
+  border: 1px solid rgba(91, 167, 255, 0.55);
+  border-radius: 9px;
+  padding: 8px;
+  cursor: pointer;
+  min-height: var(--shop-row-height);
+}
+
+.shop-btn:hover {
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 12px rgba(99, 233, 255, 0.3);
+}
+
+.shop-btn[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.shop-btn .cost { color: #ffd58e; }
+.shop-btn .owned { color: var(--neon-green); }
+
+.next-wave-btn {
+  margin-top: 6px;
+  padding: 10px 16px;
+  border-radius: 9px;
+  border: 1px solid rgba(99, 233, 255, 0.65);
+  background: linear-gradient(180deg, #1c3a5e, #152c46);
+  color: #fff;
+  cursor: pointer;
+}
+
+.shop-tip {
+  font-size: 0.85rem;
+  color: #bdd3ea;
+}
+
+.shop-footer {
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  border-top: 1px solid rgba(99, 233, 255, 0.2);
+  padding-top: 8px;
+}
+
+/* Neon-themed scrollbar for shop item area */
+.shop-buttons::-webkit-scrollbar {
+  width: 10px;
+}
+
+.shop-buttons::-webkit-scrollbar-track {
+  background: rgba(10, 18, 34, 0.8);
+  border-radius: 10px;
+}
+
+.shop-buttons::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(99, 233, 255, 0.9), rgba(109, 161, 255, 0.9));
+  border-radius: 10px;
+}
