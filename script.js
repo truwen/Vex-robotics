@@ -131,11 +131,11 @@ const SHOP_LAYOUT = {
   footerHeightPx: 78,
 };
 
-const SHOP_CARD_MIN_HEIGHT = 132;
-const SHOP_CARD_PADDING_Y = 12;
-const SHOP_CARD_LINE_GAP = 5;
+const SHOP_CARD_MIN_HEIGHT = 156;
+const SHOP_CARD_PADDING_Y = 14;
+const SHOP_CARD_LINE_GAP = 6;
 const SHOP_TITLE_FONT_SIZE = 16;
-const SHOP_META_FONT_SIZE = 13;
+const SHOP_META_FONT_SIZE = 12;
 
 const SETTINGS_MAX_VISIBLE_ROWS = 8;
 const SETTINGS_ROW_HEIGHT = 46;
@@ -2165,11 +2165,13 @@ function buildShopButtons() {
     btn.disabled = capped || disabledByState || state.credits < cost;
 
     btn.innerHTML = `
-      <div class="shop-title">${def.name}</div>
-      <div class="shop-desc">${def.desc}</div>
-      <div class="cost">Cost: ${capped ? 'MAX' : disabledByState ? 'N/A (full)' : cost}</div>
-      <div class="owned shop-tier">Tier: ${def.maxLevel === null ? `${lvl} (repeatable)` : `${lvl}/${def.maxLevel}`}</div>
-      <div class="owned shop-type">Type: ${def.category || 'core'}</div>
+      <div class="shop-btn-content">
+        <div class="shop-title">${def.name}</div>
+        <div class="shop-desc">${def.desc}</div>
+        <div class="cost">Cost: ${capped ? 'MAX' : disabledByState ? 'N/A (full)' : cost}</div>
+        <div class="owned shop-tier">Tier: ${def.maxLevel === null ? `${lvl} (repeatable)` : `${lvl}/${def.maxLevel}`}</div>
+        <div class="owned shop-type">Type: ${def.category || 'core'}</div>
+      </div>
     `;
 
     btn.addEventListener('mouseenter', () => {
