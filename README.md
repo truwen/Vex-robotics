@@ -97,6 +97,7 @@ In `script.js`:
 - `ENDLESS_SCALING` (hp/speed/projectile/fire-rate/count/elite chance scaling)
 - `SCATTER_TUNING` (spread tiers, width/density, pellet velocity, pierce)
 - `RARE_FEEDBACK` (rare text size + extra life drop chance)
+- `SETTINGS_MAX_VISIBLE_ROWS`, `SETTINGS_ROW_HEIGHT`, `SETTINGS_PANEL_HEIGHT`, `SETTINGS_FOOTER_HEIGHT` (settings menu scroll layout)
 
 Audio system notes
 ------------------
