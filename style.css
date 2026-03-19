@@ -75,6 +75,14 @@ body {
   gap: 8px 14px;
   font-size: 0.93rem;
 }
+.hud #weaponSlots {
+  font-family: Consolas, "Courier New", monospace;
+  letter-spacing: 0.01em;
+}
+.slot-active {
+  color: #fff3a4;
+  text-shadow: 0 0 10px rgba(255, 243, 164, 0.55);
+}
 
 .hud strong {
   color: var(--neon-cyan);
@@ -275,4 +283,20 @@ body {
 .shop-buttons::-webkit-scrollbar-thumb {
   background: linear-gradient(180deg, rgba(99, 233, 255, 0.9), rgba(109, 161, 255, 0.9));
   border-radius: 10px;
+}
+
+.pickup-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.pickup-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  color: #eafff5;
+  font-size: 0.92rem;
+  font-weight: 700;
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.7), 0 0 14px rgba(99, 233, 255, 0.5);
+  white-space: nowrap;
 }
