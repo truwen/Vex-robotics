@@ -15,6 +15,15 @@
   --shop-row-gap: 9px;
   --shop-list-max-height: 525px;
   --shop-footer-height: 78px;
+  --shop-card-min-height: 132px;
+  --shop-card-padding-y: 12px;
+  --shop-card-line-gap: 5px;
+  --shop-title-font-size: 1rem;
+  --shop-meta-font-size: 0.82rem;
+  --settings-row-height: 46px;
+  --settings-max-visible-rows: 8;
+  --settings-panel-height: 560px;
+  --settings-footer-height: 74px;
 }
 
 * { box-sizing: border-box; }
@@ -174,6 +183,56 @@ body {
   gap: 8px;
   justify-items: center;
 }
+.menu-content {
+  overflow: visible;
+}
+
+.menu-footer {
+  border-top: 1px solid rgba(99, 233, 255, 0.2);
+  padding-top: 8px;
+  margin-top: 8px;
+}
+
+.menu-footer.hidden {
+  display: none;
+}
+
+.menu-card.settings-layout {
+  max-height: min(86vh, var(--settings-panel-height));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) var(--settings-footer-height);
+  overflow: hidden;
+}
+
+.menu-card.settings-layout .menu-content {
+  overflow-y: auto;
+  max-height: calc(var(--settings-row-height) * var(--settings-max-visible-rows) + 38px);
+  overscroll-behavior: contain;
+  padding-right: 6px;
+}
+
+.menu-card.settings-layout .menu-btn {
+  min-height: var(--settings-row-height);
+}
+
+.menu-card.settings-layout .menu-footer {
+  align-content: center;
+  margin-top: 0;
+}
+
+.menu-card.settings-layout .menu-content::-webkit-scrollbar {
+  width: 10px;
+}
+
+.menu-card.settings-layout .menu-content::-webkit-scrollbar-track {
+  background: rgba(10, 18, 34, 0.8);
+  border-radius: 10px;
+}
+
+.menu-card.settings-layout .menu-content::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(99, 233, 255, 0.9), rgba(109, 161, 255, 0.9));
+  border-radius: 10px;
+}
 
 .menu-btn {
   min-width: 260px;
@@ -228,9 +287,16 @@ body {
   color: var(--text);
   border: 1px solid rgba(91, 167, 255, 0.55);
   border-radius: 9px;
-  padding: 8px;
+  padding: var(--shop-card-padding-y) 10px;
   cursor: pointer;
-  min-height: var(--shop-row-height);
+  min-height: var(--shop-card-min-height);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: var(--shop-card-line-gap);
+  text-align: center;
+  line-height: 1.2;
 }
 
 .shop-btn:hover {
@@ -246,6 +312,18 @@ body {
 
 .shop-btn .cost { color: #ffd58e; }
 .shop-btn .owned { color: var(--neon-green); }
+.shop-btn .shop-title {
+  font-size: var(--shop-title-font-size);
+  font-weight: 700;
+}
+.shop-btn .shop-desc {
+  color: #cde5fa;
+  font-size: 0.9rem;
+}
+.shop-btn .shop-tier,
+.shop-btn .shop-type {
+  font-size: var(--shop-meta-font-size);
+}
 .shop-group-heading {
   grid-column: 1 / -1;
   margin-top: 4px;
