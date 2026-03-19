@@ -99,6 +99,7 @@ In `script.js`:
 - `SCATTER_TUNING` (spread tiers, width/density, pellet velocity, pierce)
 - `RARE_FEEDBACK` (rare text size + extra life drop chance)
 - `SETTINGS_MAX_VISIBLE_ROWS`, `SETTINGS_ROW_HEIGHT`, `SETTINGS_PANEL_HEIGHT`, `SETTINGS_FOOTER_HEIGHT` (settings menu scroll layout)
+- Rift background: `RIFT_ENABLED`, `RIFT_CENTER_X`, `RIFT_CENTER_Y`, `RIFT_SCALE`, `RIFT_PURPLE_INTENSITY`, `RIFT_GREEN_INTENSITY`, `RIFT_PULSE_SPEED`, `RIFT_OPACITY`, `STAR_DENSITY`
 
 Audio system notes
 ------------------
