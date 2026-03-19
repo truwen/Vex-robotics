@@ -15,11 +15,11 @@
   --shop-row-gap: 9px;
   --shop-list-max-height: 525px;
   --shop-footer-height: 78px;
-  --shop-card-min-height: 132px;
-  --shop-card-padding-y: 12px;
-  --shop-card-line-gap: 5px;
+  --shop-card-min-height: 156px;
+  --shop-card-padding-y: 14px;
+  --shop-card-line-gap: 6px;
   --shop-title-font-size: 1rem;
-  --shop-meta-font-size: 0.82rem;
+  --shop-meta-font-size: 0.78rem;
   --settings-row-height: 46px;
   --settings-max-visible-rows: 8;
   --settings-panel-height: 560px;
@@ -297,6 +297,17 @@ body {
   gap: var(--shop-card-line-gap);
   text-align: center;
   line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.shop-btn-content {
+  min-height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: var(--shop-card-line-gap);
 }
 
 .shop-btn:hover {
@@ -318,7 +329,8 @@ body {
 }
 .shop-btn .shop-desc {
   color: #cde5fa;
-  font-size: 0.9rem;
+  font-size: 0.88rem;
+  max-width: 95%;
 }
 .shop-btn .shop-tier,
 .shop-btn .shop-type {
