@@ -31,9 +31,13 @@ const upgradeListEl = document.getElementById('upgradeList');
 const pickupLabelsEl = document.getElementById('pickupLabels');
 
 const menuOverlay = document.getElementById('menuOverlay');
+const menuCard = menuOverlay.querySelector('.menu-card');
 const menuTitle = document.getElementById('menuTitle');
 const menuText = document.getElementById('menuText');
+const menuContent = document.getElementById('menuContent');
 const menuButtons = document.getElementById('menuButtons');
+const menuFooter = document.getElementById('menuFooter');
+const menuFooterButtons = document.getElementById('menuFooterButtons');
 
 const shopOverlay = document.getElementById('shopOverlay');
 const shopSummaryEl = document.getElementById('shopSummary');
@@ -126,6 +130,17 @@ const SHOP_LAYOUT = {
   listMaxHeightPx: 525,
   footerHeightPx: 78,
 };
+
+const SHOP_CARD_MIN_HEIGHT = 132;
+const SHOP_CARD_PADDING_Y = 12;
+const SHOP_CARD_LINE_GAP = 5;
+const SHOP_TITLE_FONT_SIZE = 16;
+const SHOP_META_FONT_SIZE = 13;
+
+const SETTINGS_MAX_VISIBLE_ROWS = 8;
+const SETTINGS_ROW_HEIGHT = 46;
+const SETTINGS_PANEL_HEIGHT = 560;
+const SETTINGS_FOOTER_HEIGHT = 74;
 
 // Mouse-aim tuning (kept outside SETTINGS for easy visibility while tuning controls)
 const MOUSE_AIM_DEADZONE = 52; // px radius around ship where aim will not update
@@ -840,6 +855,15 @@ function applySettingsToUI() {
   document.documentElement.style.setProperty('--shop-row-gap', `${SHOP_LAYOUT.rowGapPx}px`);
   document.documentElement.style.setProperty('--shop-list-max-height', `${SHOP_LAYOUT.listMaxHeightPx}px`);
   document.documentElement.style.setProperty('--shop-footer-height', `${SHOP_LAYOUT.footerHeightPx}px`);
+  document.documentElement.style.setProperty('--shop-card-min-height', `${SHOP_CARD_MIN_HEIGHT}px`);
+  document.documentElement.style.setProperty('--shop-card-padding-y', `${SHOP_CARD_PADDING_Y}px`);
+  document.documentElement.style.setProperty('--shop-card-line-gap', `${SHOP_CARD_LINE_GAP}px`);
+  document.documentElement.style.setProperty('--shop-title-font-size', `${SHOP_TITLE_FONT_SIZE}px`);
+  document.documentElement.style.setProperty('--shop-meta-font-size', `${SHOP_META_FONT_SIZE}px`);
+  document.documentElement.style.setProperty('--settings-max-visible-rows', SETTINGS_MAX_VISIBLE_ROWS);
+  document.documentElement.style.setProperty('--settings-row-height', `${SETTINGS_ROW_HEIGHT}px`);
+  document.documentElement.style.setProperty('--settings-panel-height', `${SETTINGS_PANEL_HEIGHT}px`);
+  document.documentElement.style.setProperty('--settings-footer-height', `${SETTINGS_FOOTER_HEIGHT}px`);
 
   audio.applySettings();
   buildStars();
@@ -1386,12 +1410,13 @@ function startNextWave() {
 // -------------------------------------------------
 // Menus
 // -------------------------------------------------
-function setMenu(title, text, buttons) {
+function setMenu(title, text, buttons, options = {}) {
   menuTitle.textContent = title;
   menuText.textContent = text;
   menuButtons.innerHTML = '';
+  menuFooterButtons.innerHTML = '';
 
-  buttons.forEach((btn) => {
+  const createMenuButton = (btn, parent) => {
     const b = document.createElement('button');
     b.className = 'menu-btn';
     b.textContent = btn.label;
@@ -1402,8 +1427,17 @@ function setMenu(title, text, buttons) {
       audio.play('ui_click');
       btn.onClick();
     });
-    menuButtons.appendChild(b);
-  });
+    parent.appendChild(b);
+  };
+
+  buttons.forEach((btn) => createMenuButton(btn, menuButtons));
+
+  (options.footerButtons || []).forEach((btn) => createMenuButton(btn, menuFooterButtons));
+
+  menuCard.classList.toggle('settings-layout', Boolean(options.settingsLayout));
+  if (options.footerButtons && options.footerButtons.length) menuFooter.classList.remove('hidden');
+  else menuFooter.classList.add('hidden');
+  menuContent.scrollTop = 0;
 
   menuOverlay.classList.remove('hidden');
   shopOverlay.classList.add('hidden');
@@ -1480,20 +1514,29 @@ function settingOptionButtons() {
   addToggle('Music', 'musicEnabled');
   addCycle('Music Volume', 'musicVolume', [0, 0.2, 0.34, 0.5, 0.7]);
 
-  buttons.push({
-    label: state.previousMenuState === GAME_STATE.PAUSED ? 'Back to Pause Menu' : 'Back to Main Menu',
-    onClick: () => {
-      if (state.previousMenuState === GAME_STATE.PAUSED) showPauseMenu();
-      else showMainMenu();
-    },
-  });
-
   return buttons;
+}
+
+function settingsFooterButtons() {
+  return [
+    {
+      label: state.previousMenuState === GAME_STATE.PAUSED ? 'Back to Pause Menu' : 'Back to Main Menu',
+      onClick: () => {
+        if (state.previousMenuState === GAME_STATE.PAUSED) showPauseMenu();
+        else showMainMenu();
+      },
+    },
+  ];
 }
 
 function showSettingsMenu() {
   state.gameState = GAME_STATE.SETTINGS_MENU;
-  setMenu('SETTINGS', 'Click an option to toggle/cycle values. Saved locally for next launch.', settingOptionButtons());
+  setMenu(
+    'SETTINGS',
+    'Click an option to toggle/cycle values. Saved locally for next launch.',
+    settingOptionButtons(),
+    { settingsLayout: true, footerButtons: settingsFooterButtons() },
+  );
 }
 
 function showPauseMenu() {
@@ -2122,11 +2165,11 @@ function buildShopButtons() {
     btn.disabled = capped || disabledByState || state.credits < cost;
 
     btn.innerHTML = `
-      <div><strong>${def.name}</strong></div>
-      <div>${def.desc}</div>
+      <div class="shop-title">${def.name}</div>
+      <div class="shop-desc">${def.desc}</div>
       <div class="cost">Cost: ${capped ? 'MAX' : disabledByState ? 'N/A (full)' : cost}</div>
-      <div class="owned">Tier: ${def.maxLevel === null ? `${lvl} (repeatable)` : `${lvl}/${def.maxLevel}`}</div>
-      <div class="owned">Type: ${def.category || 'core'}</div>
+      <div class="owned shop-tier">Tier: ${def.maxLevel === null ? `${lvl} (repeatable)` : `${lvl}/${def.maxLevel}`}</div>
+      <div class="owned shop-type">Type: ${def.category || 'core'}</div>
     `;
 
     btn.addEventListener('mouseenter', () => {
