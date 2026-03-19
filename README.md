@@ -10,6 +10,7 @@ Core additions in this build
 - money orb pickups (green glowing drops with magnet pull)
 - rare drops (temporary/permanent in-run bonuses)
 - repeatable upgrades to reduce progression stall after capped upgrades
+- utility purchases (Emergency Repair + Shield Recharge) always available each shop
 - keyboard flight upgrades (WASD + Space) while preserving optional mouse mode
 - persistent settings + persistent high scores via localStorage
 - retro-style Web Audio API SFX + lightweight ambient music
@@ -32,7 +33,7 @@ Weapon system
 Weapon slots:
 1) Blaster (balanced default)
 2) Rapid Blaster (fast, lower per-shot damage)
-3) Spread Cannon (multi-shot with capped spread upgrades)
+3) Spread Blaster (multi-shot with tiered scatter upgrades)
 4) Laser Beam (piercing shots for tanky targets)
 5) Arc Cannon (splash burst for groups)
 
@@ -51,6 +52,7 @@ Rare drops:
 - visually distinct diamond drops
 - expire after lifetime
 - examples: temp overcharge, fire-rate boost, shield burst, crit focus, weapon unlock cache, permanent weapon core, drone enhancement
+- includes a very rare **Extra Life Core** pickup
 
 Progression model
 -----------------
@@ -61,6 +63,7 @@ Repeatable upgrades:
 - Deep Core Salvage (orb economy scaling)
 - Weapon Tuning (global weapon scaling)
 - Drone Overclock (drone scaling)
+- Magnet Field / Salvage / Drone Cooldown / Scatter Pellet Velocity also soft-scale
 
 This keeps late-run choices meaningful after early capped paths fill out.
 
@@ -90,6 +93,10 @@ In `script.js`:
 - `SHOP_LAYOUT` (shop rows/height/footer)
 - `HIGH_SCORE_STORAGE_KEY`, `SETTINGS_STORAGE_KEY`
 - `AUDIO_LIMITS` (shot/hover/pickup anti-spam gaps)
+- `UTILITY_PURCHASES` (heal/shield utility values + base costs)
+- `ENDLESS_SCALING` (hp/speed/projectile/fire-rate/count/elite chance scaling)
+- `SCATTER_TUNING` (spread tiers, width/density, pellet velocity, pierce)
+- `RARE_FEEDBACK` (rare text size + extra life drop chance)
 
 Audio system notes
 ------------------
