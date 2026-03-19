@@ -167,6 +167,10 @@ const DEFAULT_PLAYER_SETTINGS = {
   autoStartNextWave: false,
   showDroneTargetLines: true,
   reducedFlashes: false,
+  soundEnabled: true,
+  sfxVolume: 0.75,
+  musicEnabled: true,
+  musicVolume: 0.34,
 };
 
 const SETTINGS_STORAGE_KEY = 'neon_rift_arena_settings_v1';
@@ -271,6 +275,212 @@ const RARE_DROP_DEFS = [
   { id: 'critFocus', name: 'Critical Focus', color: '#ff7ebd', chanceWeight: 0.85, apply: () => { state.runBonuses.critChance += 0.12; state.runBonuses.critUntil = performance.now() + 12000; } },
   { id: 'weaponCore', name: 'Weapon Core +', color: '#fff', chanceWeight: 0.62, apply: () => { state.runBonuses.permanentWeaponBonus += 0.12; } },
 ];
+
+const AUDIO_LIMITS = {
+  weaponFireMinGapMs: 42,
+  uiHoverMinGapMs: 70,
+  pickupMinGapMs: 55,
+};
+
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+const audio = {
+  ctx: null,
+  master: null,
+  musicBus: null,
+  sfxBus: null,
+  musicNodes: [],
+  unlocked: false,
+  lastSfxAt: {},
+
+  ensure() {
+    if (!AudioCtx) return false;
+    if (this.ctx) return true;
+
+    this.ctx = new AudioCtx();
+    this.master = this.ctx.createGain();
+    this.sfxBus = this.ctx.createGain();
+    this.musicBus = this.ctx.createGain();
+    this.sfxBus.connect(this.master);
+    this.musicBus.connect(this.master);
+    this.master.connect(this.ctx.destination);
+    this.applySettings();
+    return true;
+  },
+
+  unlock() {
+    if (!this.ensure()) return;
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+    this.unlocked = true;
+    this.updateMusicState();
+  },
+
+  applySettings() {
+    if (!AudioCtx) return;
+    if (!this.ctx) {
+      if (!this.unlocked) return;
+      if (!this.ensure()) return;
+    }
+    const masterVol = state.settings.soundEnabled ? 1 : 0;
+    this.master.gain.setValueAtTime(masterVol, this.ctx.currentTime);
+    this.sfxBus.gain.setValueAtTime(clamp(Number(state.settings.sfxVolume) || 0, 0, 1), this.ctx.currentTime);
+    this.musicBus.gain.setValueAtTime(state.settings.musicEnabled ? clamp(Number(state.settings.musicVolume) || 0, 0, 1) : 0, this.ctx.currentTime);
+    this.updateMusicState();
+  },
+
+  canPlay(key, minGapMs = 0) {
+    const now = performance.now();
+    const last = this.lastSfxAt[key] || 0;
+    if (now - last < minGapMs) return false;
+    this.lastSfxAt[key] = now;
+    return true;
+  },
+
+  tone({
+    type = 'sine',
+    freq = 440,
+    freqEnd = null,
+    duration = 0.12,
+    gain = 0.1,
+    attack = 0.003,
+    release = 0.07,
+    pan = 0,
+    bus = 'sfx',
+  }) {
+    if (!this.unlocked || !this.ensure() || !state.settings.soundEnabled) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const amp = this.ctx.createGain();
+    const panner = this.ctx.createStereoPanner();
+    const targetBus = bus === 'music' ? this.musicBus : this.sfxBus;
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, now);
+    if (freqEnd !== null) osc.frequency.exponentialRampToValueAtTime(Math.max(30, freqEnd), now + duration);
+
+    amp.gain.setValueAtTime(0.0001, now);
+    amp.gain.linearRampToValueAtTime(gain, now + attack);
+    amp.gain.exponentialRampToValueAtTime(0.0001, now + duration + release);
+
+    panner.pan.setValueAtTime(clamp(pan, -1, 1), now);
+    osc.connect(amp);
+    amp.connect(panner);
+    panner.connect(targetBus);
+
+    osc.start(now);
+    osc.stop(now + duration + release + 0.02);
+  },
+
+  noiseBurst({ duration = 0.11, gain = 0.06, pan = 0 }) {
+    if (!this.unlocked || !this.ensure() || !state.settings.soundEnabled) return;
+    const samples = Math.floor(this.ctx.sampleRate * duration);
+    const buffer = this.ctx.createBuffer(1, samples, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < samples; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / samples);
+
+    const src = this.ctx.createBufferSource();
+    const filter = this.ctx.createBiquadFilter();
+    const amp = this.ctx.createGain();
+    const panner = this.ctx.createStereoPanner();
+    const now = this.ctx.currentTime;
+
+    src.buffer = buffer;
+    filter.type = 'highpass';
+    filter.frequency.setValueAtTime(420, now);
+    amp.gain.setValueAtTime(gain, now);
+    amp.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    panner.pan.setValueAtTime(clamp(pan, -1, 1), now);
+
+    src.connect(filter);
+    filter.connect(amp);
+    amp.connect(panner);
+    panner.connect(this.sfxBus);
+    src.start(now);
+  },
+
+  play(name, opts = {}) {
+    if (!this.unlocked || !state.settings.soundEnabled) return;
+    const pan = opts.pan || 0;
+    if (name === 'weapon_blaster') this.tone({ type: 'square', freq: 520, freqEnd: 260, duration: 0.06, gain: 0.08, pan });
+    if (name === 'weapon_rapid') this.tone({ type: 'square', freq: 740, freqEnd: 420, duration: 0.04, gain: 0.055, pan });
+    if (name === 'weapon_spread') this.tone({ type: 'triangle', freq: 480, freqEnd: 230, duration: 0.085, gain: 0.075, pan });
+    if (name === 'weapon_laser') this.tone({ type: 'sawtooth', freq: 980, freqEnd: 320, duration: 0.07, gain: 0.06, pan });
+    if (name === 'weapon_arc') {
+      this.tone({ type: 'triangle', freq: 330, freqEnd: 180, duration: 0.12, gain: 0.09, pan });
+      this.noiseBurst({ duration: 0.08, gain: 0.035, pan });
+    }
+    if (name === 'enemy_hit') this.tone({ type: 'triangle', freq: 250, freqEnd: 190, duration: 0.03, gain: 0.035, pan });
+    if (name === 'enemy_destroy') {
+      this.tone({ type: 'sawtooth', freq: 185, freqEnd: 70, duration: 0.2, gain: opts.big ? 0.13 : 0.08, pan });
+      this.noiseBurst({ duration: opts.big ? 0.22 : 0.14, gain: opts.big ? 0.08 : 0.045, pan });
+    }
+    if (name === 'player_hit') this.tone({ type: 'square', freq: 170, freqEnd: 120, duration: 0.15, gain: 0.1, pan: -0.1 });
+    if (name === 'shield_hit') this.tone({ type: 'triangle', freq: 900, freqEnd: 420, duration: 0.1, gain: 0.065, pan: 0.1 });
+    if (name === 'pickup_money') this.tone({ type: 'sine', freq: 700, freqEnd: 1020, duration: 0.08, gain: 0.055, pan });
+    if (name === 'pickup_rare') {
+      this.tone({ type: 'sine', freq: 620, freqEnd: 980, duration: 0.11, gain: 0.07, pan });
+      this.tone({ type: 'triangle', freq: 980, freqEnd: 1400, duration: 0.09, gain: 0.045, pan });
+    }
+    if (name === 'shop_buy') this.tone({ type: 'sine', freq: 580, freqEnd: 860, duration: 0.1, gain: 0.06, pan });
+    if (name === 'wave_clear') {
+      this.tone({ type: 'triangle', freq: 420, freqEnd: 620, duration: 0.12, gain: 0.07 });
+      this.tone({ type: 'triangle', freq: 620, freqEnd: 860, duration: 0.14, gain: 0.06 });
+    }
+    if (name === 'game_over') {
+      this.tone({ type: 'sawtooth', freq: 340, freqEnd: 130, duration: 0.35, gain: 0.1 });
+      this.noiseBurst({ duration: 0.2, gain: 0.05 });
+    }
+    if (name === 'ui_click') this.tone({ type: 'square', freq: 520, freqEnd: 430, duration: 0.04, gain: 0.045 });
+    if (name === 'ui_hover') this.tone({ type: 'sine', freq: 760, freqEnd: 840, duration: 0.025, gain: 0.03 });
+  },
+
+  startMusic() {
+    if (!this.unlocked || !this.ensure()) return;
+    if (this.musicNodes.length > 0) return;
+    const now = this.ctx.currentTime;
+    const base = this.ctx.createOscillator();
+    const pad = this.ctx.createOscillator();
+    const lfo = this.ctx.createOscillator();
+    const lfoGain = this.ctx.createGain();
+    const baseGain = this.ctx.createGain();
+    const padGain = this.ctx.createGain();
+
+    base.type = 'triangle';
+    base.frequency.setValueAtTime(92, now);
+    pad.type = 'sine';
+    pad.frequency.setValueAtTime(184, now);
+    lfo.type = 'sine';
+    lfo.frequency.setValueAtTime(0.12, now);
+    lfoGain.gain.setValueAtTime(12, now);
+    baseGain.gain.setValueAtTime(0.06, now);
+    padGain.gain.setValueAtTime(0.03, now);
+
+    lfo.connect(lfoGain);
+    lfoGain.connect(base.frequency);
+    base.connect(baseGain);
+    pad.connect(padGain);
+    baseGain.connect(this.musicBus);
+    padGain.connect(this.musicBus);
+
+    base.start(now);
+    pad.start(now);
+    lfo.start(now);
+    this.musicNodes = [base, pad, lfo];
+  },
+
+  stopMusic() {
+    if (!this.ctx) return;
+    this.musicNodes.forEach((n) => {
+      try { n.stop(); } catch (_err) { /* no-op */ }
+    });
+    this.musicNodes = [];
+  },
+
+  updateMusicState() {
+    if (!this.ctx || !this.unlocked) return;
+    if (state.settings.musicEnabled && state.settings.soundEnabled) this.startMusic();
+    else this.stopMusic();
+  },
+};
 
 // -------------------------------------------------
 // State object
@@ -509,6 +719,7 @@ function applySettingsToUI() {
   document.documentElement.style.setProperty('--shop-list-max-height', `${SHOP_LAYOUT.listMaxHeightPx}px`);
   document.documentElement.style.setProperty('--shop-footer-height', `${SHOP_LAYOUT.footerHeightPx}px`);
 
+  audio.applySettings();
   buildStars();
 }
 
@@ -970,6 +1181,7 @@ function endRun() {
   state.highScores.bestCredits = Math.max(state.highScores.bestCredits, Math.floor(state.totalCreditsEarned));
   state.highScores.totalKillsBestRun = Math.max(state.highScores.totalKillsBestRun, state.totalKills);
   saveHighScores();
+  audio.play('game_over');
   state.gameState = GAME_STATE.GAME_OVER;
   showGameOverMenu();
 }
@@ -1026,7 +1238,13 @@ function setMenu(title, text, buttons) {
     const b = document.createElement('button');
     b.className = 'menu-btn';
     b.textContent = btn.label;
-    b.addEventListener('click', btn.onClick);
+    b.addEventListener('mouseenter', () => {
+      if (audio.canPlay('ui_hover', AUDIO_LIMITS.uiHoverMinGapMs)) audio.play('ui_hover');
+    });
+    b.addEventListener('click', () => {
+      audio.play('ui_click');
+      btn.onClick();
+    });
     menuButtons.appendChild(b);
   });
 
@@ -1100,6 +1318,10 @@ function settingOptionButtons() {
   addToggle('Auto Start Next Wave', 'autoStartNextWave');
   addToggle('Show Drone Target Lines', 'showDroneTargetLines');
   addToggle('Reduced Flashes', 'reducedFlashes');
+  addToggle('Master Sound', 'soundEnabled');
+  addCycle('SFX Volume', 'sfxVolume', [0, 0.25, 0.5, 0.75, 1]);
+  addToggle('Music', 'musicEnabled');
+  addCycle('Music Volume', 'musicVolume', [0, 0.2, 0.34, 0.5, 0.7]);
 
   buttons.push({
     label: state.previousMenuState === GAME_STATE.PAUSED ? 'Back to Pause Menu' : 'Back to Main Menu',
@@ -1216,6 +1438,9 @@ function shootPlayer() {
   }
 
   state.lastShotAt = now;
+  if (audio.canPlay('weapon_fire', AUDIO_LIMITS.weaponFireMinGapMs)) {
+    audio.play(`weapon_${weaponId}`);
+  }
 }
 
 function updatePlayer(dtMs, now) {
@@ -1404,6 +1629,7 @@ function updatePickups(dtMs) {
       state.totalCreditsEarned += orb.value;
       addParticle(orb.x, orb.y, NEON.green, 0.2, 1.4, 180, 1.2, 2.5);
       addPickupLabel(`+${orb.value}`, orb.x, orb.y, '#8dffb1');
+      if (audio.canPlay('pickup_money', AUDIO_LIMITS.pickupMinGapMs)) audio.play('pickup_money', { pan: clamp((orb.x / canvas.width) * 2 - 1, -1, 1) });
       state.pickups.splice(i, 1);
       continue;
     }
@@ -1433,6 +1659,7 @@ function updatePickups(dtMs) {
       if (def) def.apply();
       addPickupLabel(drop.label, drop.x, drop.y, drop.color);
       addExplosion(drop.x, drop.y, drop.color, 12, 24);
+      audio.play('pickup_rare', { pan: clamp((drop.x / canvas.width) * 2 - 1, -1, 1) });
       state.rareDrops.splice(i, 1);
       continue;
     }
@@ -1498,6 +1725,7 @@ function damagePlayer(amount) {
     p.shield -= absorbed;
     remaining -= absorbed;
     addExplosion(p.x, p.y, NEON.cyan, 8, 24);
+    if (audio.canPlay('shield_hit', 40)) audio.play('shield_hit');
   }
 
   if (remaining > 0) {
@@ -1505,6 +1733,7 @@ function damagePlayer(amount) {
     state.damageTakenThisWave += remaining;
     addExplosion(p.x, p.y, NEON.red, 16, 32);
     maybeShake(7);
+    if (audio.canPlay('player_hit', 60)) audio.play('player_hit');
   }
 
   if (p.health <= 0) {
@@ -1546,6 +1775,7 @@ function killEnemy(index, enemy) {
 
   addExplosion(enemy.x, enemy.y, colorMap[enemy.typeId], enemy.typeId === 'bulwark' ? 20 : 14, enemy.typeId === 'bulwark' ? 42 : 28);
   maybeShake(enemy.typeId === 'bulwark' ? 6 : 3.5);
+  audio.play('enemy_destroy', { big: enemy.typeId === 'bulwark', pan: clamp((enemy.x / canvas.width) * 2 - 1, -1, 1) });
 
   // Splitter core spawns two dart scouts on death.
   if (enemy.typeId === 'splitterCore') {
@@ -1573,7 +1803,10 @@ function handleCollisions() {
 
       enemy.hp -= bullet.damage;
       if (enemy.hp <= 0) killEnemy(e, enemy);
-      else addExplosion(enemy.x, enemy.y, NEON.blue, 6, 18);
+      else {
+        addExplosion(enemy.x, enemy.y, NEON.blue, 6, 18);
+        if (audio.canPlay('enemy_hit', 22)) audio.play('enemy_hit', { pan: clamp((enemy.x / canvas.width) * 2 - 1, -1, 1) });
+      }
 
       if (bullet.splashRadius > 0) {
         for (const other of state.enemies) {
@@ -1626,6 +1859,7 @@ function finishWave() {
   const total = waveBonus + fastBonus + noDamageBonus;
   state.credits += total;
   state.totalCreditsEarned += total;
+  audio.play('wave_clear');
 
   enterShop({ waveBonus, fastBonus, noDamageBonus });
   updateHud();
@@ -1658,6 +1892,7 @@ function buyUpgrade(id) {
   if (state.credits < cost) return;
 
   state.credits -= cost;
+  audio.play('shop_buy');
   const beforeLevel = upgradeLevel(id);
   def.apply();
   state.upgradesPurchased += 1;
@@ -1696,6 +1931,9 @@ function buildShopButtons() {
       <div class="owned">Tier: ${def.maxLevel === null ? `${lvl} (repeatable)` : `${lvl}/${def.maxLevel}`}</div>
     `;
 
+    btn.addEventListener('mouseenter', () => {
+      if (audio.canPlay('ui_hover', AUDIO_LIMITS.uiHoverMinGapMs)) audio.play('ui_hover');
+    });
     btn.addEventListener('click', () => buyUpgrade(def.id));
     shopButtonsEl.appendChild(btn);
   });
@@ -1746,6 +1984,14 @@ function updateHud() {
 // -------------------------------------------------
 // Input
 // -------------------------------------------------
+function unlockAudioFromUserGesture() {
+  audio.unlock();
+}
+
+window.addEventListener('pointerdown', unlockAudioFromUserGesture, { once: true });
+window.addEventListener('keydown', unlockAudioFromUserGesture, { once: true });
+window.addEventListener('touchstart', unlockAudioFromUserGesture, { once: true, passive: true });
+
 window.addEventListener('keydown', (event) => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D'].includes(event.key)) event.preventDefault();
   state.keys[event.key] = true;
@@ -1841,6 +2087,7 @@ window.addEventListener('mouseup', (event) => {
 
 gameWrap.addEventListener('contextmenu', (event) => event.preventDefault());
 nextWaveButton.addEventListener('click', () => {
+  audio.play('ui_click');
   if (state.gameState === GAME_STATE.SHOP) startNextWave();
 });
 
