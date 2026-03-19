@@ -142,6 +142,16 @@ const SETTINGS_ROW_HEIGHT = 46;
 const SETTINGS_PANEL_HEIGHT = 560;
 const SETTINGS_FOOTER_HEIGHT = 74;
 
+const RIFT_ENABLED = true;
+const RIFT_CENTER_X = 0.5; // normalized (0-1) or absolute px if > 1
+const RIFT_CENTER_Y = 0.42; // normalized (0-1) or absolute px if > 1
+const RIFT_SCALE = 1;
+const RIFT_PURPLE_INTENSITY = 0.92;
+const RIFT_GREEN_INTENSITY = 0.78;
+const RIFT_PULSE_SPEED = 0.0017;
+const RIFT_OPACITY = 0.46;
+const STAR_DENSITY = 1;
+
 // Mouse-aim tuning (kept outside SETTINGS for easy visibility while tuning controls)
 const MOUSE_AIM_DEADZONE = 52; // px radius around ship where aim will not update
 const MOUSE_AIM_TURN_RATE = 0.28; // max radians per frame step for stable directional aim
@@ -2340,11 +2350,12 @@ nextWaveButton.addEventListener('click', () => {
 // -------------------------------------------------
 function buildStars() {
   state.stars = [];
-  const count = state.settings.graphicsIntensity === 'low'
+  const countBase = state.settings.graphicsIntensity === 'low'
     ? SETTINGS.starDensityLow
     : state.settings.graphicsIntensity === 'medium'
       ? SETTINGS.starDensityMedium
       : SETTINGS.starDensityHigh;
+  const count = Math.max(30, Math.round(countBase * STAR_DENSITY));
 
   for (let i = 0; i < count; i++) {
     const depth = Math.random() < 0.68 ? 1 : 2;
@@ -2379,6 +2390,76 @@ function drawBackground(now) {
   vignette.addColorStop(1, 'rgba(0,0,0,0.45)');
   ctx.fillStyle = vignette;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+function drawRift(now) {
+  if (!RIFT_ENABLED) return;
+
+  const cx = RIFT_CENTER_X <= 1 ? canvas.width * RIFT_CENTER_X : RIFT_CENTER_X;
+  const cy = RIFT_CENTER_Y <= 1 ? canvas.height * RIFT_CENTER_Y : RIFT_CENTER_Y;
+  const pulse = 0.72 + 0.28 * Math.sin(now * RIFT_PULSE_SPEED);
+  const shimmer = 0.5 + 0.5 * Math.sin(now * (RIFT_PULSE_SPEED * 2.1));
+  const menuBoost = state.gameState === GAME_STATE.PLAYING ? 0.72 : 1.08;
+  const baseOpacity = RIFT_OPACITY * menuBoost;
+  const rx = 260 * RIFT_SCALE;
+  const ry = 175 * RIFT_SCALE;
+
+  // Large purple haze
+  const outer = ctx.createRadialGradient(cx, cy, 30, cx, cy, rx * 1.7);
+  outer.addColorStop(0, `rgba(161, 88, 255, ${0.34 * baseOpacity * RIFT_PURPLE_INTENSITY * pulse})`);
+  outer.addColorStop(0.52, `rgba(99, 42, 166, ${0.19 * baseOpacity * RIFT_PURPLE_INTENSITY})`);
+  outer.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = outer;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Inner toxic core
+  const inner = ctx.createRadialGradient(cx, cy, 12, cx, cy, rx * 0.74);
+  inner.addColorStop(0, `rgba(156, 255, 110, ${0.35 * baseOpacity * RIFT_GREEN_INTENSITY * pulse})`);
+  inner.addColorStop(0.5, `rgba(84, 230, 120, ${0.2 * baseOpacity * RIFT_GREEN_INTENSITY})`);
+  inner.addColorStop(1, 'rgba(20,80,40,0)');
+  ctx.fillStyle = inner;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Jagged dimensional tear ring
+  const segments = 56;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(Math.sin(now * 0.00011) * 0.15);
+  ctx.globalAlpha = clamp(baseOpacity, 0, 1);
+  neonStroke(`rgba(191,108,255,${0.56 * RIFT_PURPLE_INTENSITY})`, 2.4, 22);
+  ctx.beginPath();
+  for (let i = 0; i <= segments; i++) {
+    const t = (i / segments) * Math.PI * 2;
+    const noise = Math.sin(t * 5 + now * 0.0012) * 16 + Math.sin(t * 9 - now * 0.0017) * 10;
+    const x = Math.cos(t) * (rx + noise);
+    const y = Math.sin(t) * (ry + noise * 0.68);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.stroke();
+
+  // Toxic inner fracture lines
+  neonStroke(`rgba(134,255,144,${0.5 * RIFT_GREEN_INTENSITY * shimmer})`, 1.6, 15);
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2 + now * 0.00023;
+    const len = rx * (0.33 + ((i % 3) * 0.14));
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * 18, Math.sin(a) * 13);
+    ctx.lineTo(Math.cos(a) * len, Math.sin(a) * len * 0.64);
+    ctx.stroke();
+  }
+
+  // Occasional shimmer ripple
+  const ripple = (now * 0.0012) % 1;
+  if (ripple < 0.14) {
+    const rp = ripple / 0.14;
+    neonStroke(`rgba(176,255,126,${0.26 * (1 - rp) * baseOpacity})`, 2.2, 12);
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx * (0.24 + rp * 0.8), ry * (0.2 + rp * 0.8), 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawStars(now) {
@@ -2766,6 +2847,7 @@ function draw(now) {
   }
 
   drawBackground(now);
+  drawRift(now);
   drawStars(now);
   drawFx();
   drawEnemies(now);
