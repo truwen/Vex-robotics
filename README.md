@@ -91,6 +91,7 @@ In `script.js`:
 - `RARE_DROP_CHANCE`, `RARE_DROP_DEFS` (drop rates and effects)
 - `SETTINGS` (player/enemy/economy/drone/visual tuning)
 - `SHOP_LAYOUT` (shop rows/height/footer)
+- `SHOP_CARD_MIN_HEIGHT`, `SHOP_CARD_PADDING_Y`, `SHOP_CARD_LINE_GAP`, `SHOP_TITLE_FONT_SIZE`, `SHOP_META_FONT_SIZE` (shop card readability/spacing)
 - `HIGH_SCORE_STORAGE_KEY`, `SETTINGS_STORAGE_KEY`
 - `AUDIO_LIMITS` (shot/hover/pickup anti-spam gaps)
 - `UTILITY_PURCHASES` (heal/shield utility values + base costs)
