@@ -23,8 +23,12 @@ const healthEl = document.getElementById('health');
 const shieldEl = document.getElementById('shield');
 const creditsEl = document.getElementById('credits');
 const weaponEl = document.getElementById('weapon');
+const weaponSlotsEl = document.getElementById('weaponSlots');
 const dronesEl = document.getElementById('drones');
+const bestScoreEl = document.getElementById('bestScore');
+const bestWaveEl = document.getElementById('bestWave');
 const upgradeListEl = document.getElementById('upgradeList');
+const pickupLabelsEl = document.getElementById('pickupLabels');
 
 const menuOverlay = document.getElementById('menuOverlay');
 const menuTitle = document.getElementById('menuTitle');
@@ -166,6 +170,35 @@ const DEFAULT_PLAYER_SETTINGS = {
 };
 
 const SETTINGS_STORAGE_KEY = 'neon_rift_arena_settings_v1';
+const HIGH_SCORE_STORAGE_KEY = 'neon_rift_arena_high_scores_v1';
+
+const WEAPON_SLOTS = ['blaster', 'rapid', 'spread', 'laser', 'arc'];
+const WEAPON_DEFS = {
+  blaster: { label: 'Blaster', fireDelayMs: 200, bulletDamage: 1.25, bulletSpeed: 9.3, bulletsPerShot: 1, spreadStep: 0, pierce: 0 },
+  rapid: { label: 'Rapid Blaster', fireDelayMs: 95, bulletDamage: 0.62, bulletSpeed: 10.5, bulletsPerShot: 1, spreadStep: 0, pierce: 0 },
+  spread: { label: 'Spread Cannon', fireDelayMs: 235, bulletDamage: 0.92, bulletSpeed: 8.5, bulletsPerShot: 3, spreadStep: 0.17, pierce: 0 },
+  laser: { label: 'Laser Beam', fireDelayMs: 170, bulletDamage: 0.8, bulletSpeed: 13.5, bulletsPerShot: 1, spreadStep: 0, pierce: 3 },
+  arc: { label: 'Arc Cannon', fireDelayMs: 285, bulletDamage: 1.7, bulletSpeed: 8.8, bulletsPerShot: 1, spreadStep: 0, pierce: 0, splashRadius: 82 },
+};
+
+const PICKUP_SETTINGS = {
+  moneyOrbLifetimeMs: 8500,
+  moneyOrbValueMinScale: 0.7,
+  moneyOrbValueMaxScale: 1.25,
+  moneyOrbGlowSize: 16,
+  moneyMagnetBaseRadius: 42,
+  moneyMagnetRadiusPerTier: 48,
+  moneyAttractionBase: 0.22,
+  moneyAttractionPerTier: 0.065,
+  rareDropLifetimeMs: 9000,
+};
+
+const RARE_DROP_CHANCE = {
+  base: 0.045,
+  bulwarkBonus: 0.04,
+  splitterBonus: 0.025,
+  turretBonus: 0.02,
+};
 
 // -------------------------------------------------
 // Upgrade/shop definitions
@@ -224,6 +257,19 @@ const UPGRADE_DEFS = [
   { id: 'droneBomber', name: 'Bomber Drone', key: '', maxLevel: 1, baseCost: 300, costScale: 1, desc: 'AOE bombs for crowds', minWave: 3, apply: () => unlockDrone('bomber') },
   { id: 'droneElectricity', name: 'Electricity Drone', key: '', maxLevel: 1, baseCost: 320, costScale: 1, desc: 'Arc chains nearby enemies', minWave: 4, apply: () => unlockDrone('electricity') },
   { id: 'droneLaser', name: 'Laser Drone', key: '', maxLevel: 1, baseCost: 340, costScale: 1, desc: 'Sustained beam vs tanks', minWave: 5, apply: () => unlockDrone('laser') },
+  { id: 'deepCoreSalvage', name: 'Deep Core Salvage', key: '', maxLevel: null, baseCost: 160, costScale: 1.27, desc: 'Repeatable: +credits from all orbs', minWave: 3, apply: () => { state.upgrades.deepCoreSalvage += 1; } },
+  { id: 'weaponTuning', name: 'Weapon Tuning', key: '', maxLevel: null, baseCost: 175, costScale: 1.28, desc: 'Repeatable: +global weapon damage', minWave: 4, apply: () => { state.upgrades.weaponTuning += 1; } },
+  { id: 'droneOverclock', name: 'Drone Overclock', key: '', maxLevel: null, baseCost: 185, costScale: 1.31, desc: 'Repeatable: +drone damage output', minWave: 5, apply: () => { state.upgrades.droneOverclock += 1; } },
+];
+
+const RARE_DROP_DEFS = [
+  { id: 'tempOvercharge', name: 'Temp Overcharge', color: '#ffd97f', chanceWeight: 1.25, apply: () => { state.runBonuses.damageMultiplier += 0.26; state.runBonuses.overchargeUntil = performance.now() + 13000; } },
+  { id: 'fireRateBoost', name: 'Fire Rate Boost', color: '#b9ff8a', chanceWeight: 1.2, apply: () => { state.runBonuses.fireRateMultiplier += 0.23; state.runBonuses.fireRateUntil = performance.now() + 12500; } },
+  { id: 'shieldBurst', name: 'Shield Burst', color: '#79f5ff', chanceWeight: 1, apply: () => { state.player.shield = Math.min(state.player.maxShield, state.player.shield + 42); state.player.health = Math.min(state.player.maxHealth, state.player.health + 8); } },
+  { id: 'weaponCache', name: 'Weapon Cache', color: '#d9a4ff', chanceWeight: 0.8, apply: () => unlockRandomWeapon() },
+  { id: 'dronePulse', name: 'Drone Enhancement', color: '#ffa66f', chanceWeight: 0.8, apply: () => { state.runBonuses.droneDamageMultiplier += 0.25; state.runBonuses.dronePowerUntil = performance.now() + 14000; } },
+  { id: 'critFocus', name: 'Critical Focus', color: '#ff7ebd', chanceWeight: 0.85, apply: () => { state.runBonuses.critChance += 0.12; state.runBonuses.critUntil = performance.now() + 12000; } },
+  { id: 'weaponCore', name: 'Weapon Core +', color: '#fff', chanceWeight: 0.62, apply: () => { state.runBonuses.permanentWeaponBonus += 0.12; } },
 ];
 
 // -------------------------------------------------
@@ -251,6 +297,8 @@ const state = {
   enemyBullets: [],
   bombs: [],
   pickups: [],
+  rareDrops: [],
+  pickupLabels: [],
 
   drones: [], // each: { type, orbitAngle, cooldown, targetRef, retargetAt }
   arcEffects: [], // electricity lines
@@ -275,6 +323,12 @@ const state = {
   shake: 0,
 
   autoNextWaveAt: null,
+  highScores: {
+    bestScore: 0,
+    highestWave: 1,
+    bestCredits: 0,
+    totalKillsBestRun: 0,
+  },
 
   upgrades: {
     rapidFire: 0,
@@ -291,6 +345,28 @@ const state = {
     droneBomber: 0,
     droneElectricity: 0,
     droneLaser: 0,
+    deepCoreSalvage: 0,
+    weaponTuning: 0,
+    droneOverclock: 0,
+  },
+  currentWeaponSlot: 1,
+  weaponUnlocks: {
+    blaster: true,
+    rapid: true,
+    spread: false,
+    laser: false,
+    arc: false,
+  },
+  runBonuses: {
+    damageMultiplier: 0,
+    fireRateMultiplier: 0,
+    critChance: 0,
+    permanentWeaponBonus: 0,
+    droneDamageMultiplier: 0,
+    overchargeUntil: 0,
+    fireRateUntil: 0,
+    critUntil: 0,
+    dronePowerUntil: 0,
   },
 };
 
@@ -397,6 +473,25 @@ function loadSettings() {
   }
 }
 
+function loadHighScores() {
+  try {
+    const raw = localStorage.getItem(HIGH_SCORE_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    state.highScores = { ...state.highScores, ...parsed };
+  } catch (_err) {
+    // Ignore localStorage failures gracefully.
+  }
+}
+
+function saveHighScores() {
+  try {
+    localStorage.setItem(HIGH_SCORE_STORAGE_KEY, JSON.stringify(state.highScores));
+  } catch (_err) {
+    // Ignore localStorage failures gracefully.
+  }
+}
+
 function applySettingsToUI() {
   // HUD scaling is done via CSS transform so beginners can quickly tweak.
   const scale = clamp(Number(state.settings.hudScale) || 1, 0.8, 1.4);
@@ -417,17 +512,26 @@ function applySettingsToUI() {
   buildStars();
 }
 
+function addPickupLabel(text, x, y, color = '#eafff5') {
+  state.pickupLabels.push({
+    text,
+    x,
+    y,
+    color,
+    vy: -0.44,
+    life: 900,
+    maxLife: 900,
+  });
+}
+
 // -------------------------------------------------
 // Stat helpers
 // -------------------------------------------------
 function fireDelay() {
-  return Math.max(70, SETTINGS.baseFireCooldownMs - state.upgrades.rapidFire * 13);
-}
-function bulletDamage() {
-  return SETTINGS.baseBulletDamage + state.upgrades.overchargedRounds;
-}
-function bulletSpeed() {
-  return SETTINGS.baseBulletSpeed + state.upgrades.velocityRounds * 1.2;
+  const weapon = activeWeaponDef();
+  const base = Math.max(55, weapon.fireDelayMs - state.upgrades.rapidFire * 8);
+  const boost = 1 + state.runBonuses.fireRateMultiplier;
+  return base / boost;
 }
 function thrustPower() {
   return SETTINGS.thrustPower + state.upgrades.thrusterBoost * 0.03;
@@ -436,15 +540,37 @@ function topSpeed() {
   return SETTINGS.baseMaxSpeed + state.upgrades.thrusterBoost * 0.5;
 }
 function pickupRadius() {
-  return SETTINGS.basePickupRadius + state.upgrades.magnetField * SETTINGS.magnetRadiusPerTier;
+  return PICKUP_SETTINGS.moneyMagnetBaseRadius + state.upgrades.magnetField * PICKUP_SETTINGS.moneyMagnetRadiusPerTier;
+}
+function pickupPullStrength() {
+  return PICKUP_SETTINGS.moneyAttractionBase + state.upgrades.magnetField * PICKUP_SETTINGS.moneyAttractionPerTier;
 }
 function salvageMultiplier() {
-  return 1 + state.upgrades.salvageBonus * 0.18;
+  return 1 + state.upgrades.salvageBonus * 0.18 + state.upgrades.deepCoreSalvage * 0.08;
+}
+function weaponDamageMultiplier() {
+  return 1
+    + state.upgrades.overchargedRounds * 0.16
+    + state.upgrades.weaponTuning * 0.08
+    + state.runBonuses.damageMultiplier
+    + state.runBonuses.permanentWeaponBonus;
+}
+function critMultiplier() {
+  return state.runBonuses.critChance > 0 && Math.random() < state.runBonuses.critChance ? 1.75 : 1;
+}
+function weaponProjectileSpeed() {
+  return activeWeaponDef().bulletSpeed + state.upgrades.velocityRounds * 0.9;
+}
+function activeWeaponId() {
+  return WEAPON_SLOTS[state.currentWeaponSlot - 1] || 'blaster';
+}
+function activeWeaponDef() {
+  return WEAPON_DEFS[activeWeaponId()];
 }
 function weaponName() {
-  if (state.upgrades.scatterCannon >= 2) return 'Rift Scatter Mk-II';
-  if (state.upgrades.scatterCannon >= 1) return 'Rift Scatter Mk-I';
-  return 'Rift Blaster';
+  const id = activeWeaponId();
+  const base = WEAPON_DEFS[id].label;
+  return state.weaponUnlocks[id] ? base : `${base} (Locked)`;
 }
 
 // -------------------------------------------------
@@ -501,17 +627,22 @@ function createEnemy(typeId, x, y, wave) {
   };
 }
 
-function createPlayerBullet(offsetAngle = 0) {
+function createPlayerBullet(offsetAngle = 0, weaponId = activeWeaponId()) {
+  const weapon = WEAPON_DEFS[weaponId];
   const ang = state.player.angle + offsetAngle;
+  const baseDamage = weapon.bulletDamage * weaponDamageMultiplier() * critMultiplier();
   return {
     x: state.player.x + Math.cos(ang) * state.player.radius,
     y: state.player.y + Math.sin(ang) * state.player.radius,
-    vx: Math.cos(ang) * bulletSpeed() + state.player.vx * 0.15,
-    vy: Math.sin(ang) * bulletSpeed() + state.player.vy * 0.15,
-    radius: 2.6,
+    vx: Math.cos(ang) * weaponProjectileSpeed() + state.player.vx * 0.15,
+    vy: Math.sin(ang) * weaponProjectileSpeed() + state.player.vy * 0.15,
+    radius: weaponId === 'laser' ? 2 : 2.8,
     life: 1200,
-    damage: bulletDamage(),
+    damage: baseDamage,
     trail: [],
+    weaponId,
+    pierce: weapon.pierce || 0,
+    splashRadius: weapon.splashRadius || 0,
   };
 }
 
@@ -529,7 +660,58 @@ function createEnemyBullet(enemy, angleToPlayer) {
 }
 
 function spawnCreditPickup(x, y, value) {
-  state.pickups.push({ x, y, vx: rand(-0.5, 0.5), vy: rand(-0.5, 0.5), radius: 5, value, life: 8000 });
+  const scaled = Math.round(value * rand(PICKUP_SETTINGS.moneyOrbValueMinScale, PICKUP_SETTINGS.moneyOrbValueMaxScale) * salvageMultiplier());
+  state.pickups.push({
+    kind: 'money',
+    x,
+    y,
+    vx: rand(-0.5, 0.5),
+    vy: rand(-0.45, 0.45),
+    radius: 5.2,
+    value: Math.max(1, scaled),
+    life: PICKUP_SETTINGS.moneyOrbLifetimeMs,
+    bobTime: rand(0, Math.PI * 2),
+  });
+}
+
+function spawnRareDrop(x, y, enemyTypeId) {
+  let chance = RARE_DROP_CHANCE.base;
+  if (enemyTypeId === 'bulwark') chance += RARE_DROP_CHANCE.bulwarkBonus;
+  if (enemyTypeId === 'splitterCore') chance += RARE_DROP_CHANCE.splitterBonus;
+  if (enemyTypeId === 'pulseTurret') chance += RARE_DROP_CHANCE.turretBonus;
+  if (Math.random() > chance) return;
+
+  const totalWeight = RARE_DROP_DEFS.reduce((sum, d) => sum + d.chanceWeight, 0);
+  let roll = Math.random() * totalWeight;
+  let chosen = RARE_DROP_DEFS[0];
+  for (const def of RARE_DROP_DEFS) {
+    roll -= def.chanceWeight;
+    if (roll <= 0) { chosen = def; break; }
+  }
+
+  state.rareDrops.push({
+    id: chosen.id,
+    x,
+    y,
+    vx: rand(-0.35, 0.35),
+    vy: rand(-0.35, 0.35),
+    radius: 7.4,
+    life: PICKUP_SETTINGS.rareDropLifetimeMs,
+    color: chosen.color,
+    label: chosen.name,
+  });
+}
+
+function unlockRandomWeapon() {
+  const locked = WEAPON_SLOTS.filter((id) => !state.weaponUnlocks[id]);
+  if (locked.length === 0) {
+    state.credits += 45;
+    addPickupLabel('+45 bonus credits', state.player.x, state.player.y - 20, '#9effa7');
+    return;
+  }
+  const pick = locked[Math.floor(rand(0, locked.length))];
+  state.weaponUnlocks[pick] = true;
+  addPickupLabel(`Unlocked ${WEAPON_DEFS[pick].label}`, state.player.x, state.player.y - 20, '#f8d7ff');
 }
 
 // -------------------------------------------------
@@ -586,6 +768,7 @@ function applyDamageToEnemyRef(enemyRef, dmg) {
 
 function updateDrones(dtMs, now) {
   const p = state.player;
+  const droneMult = 1 + state.upgrades.droneOverclock * 0.12 + state.runBonuses.droneDamageMultiplier;
   state.beamEffects = [];
   state.arcEffects = [];
 
@@ -625,7 +808,7 @@ function updateDrones(dtMs, now) {
             vy: Math.sin(ang) * 3.2,
             radius: 4,
             life: 1800,
-            damage: SETTINGS.bomberDamage,
+            damage: SETTINGS.bomberDamage * droneMult,
             aoe: SETTINGS.bomberAoeRadius,
           });
           drone.cooldown = SETTINGS.bomberCooldownMs;
@@ -638,14 +821,14 @@ function updateDrones(dtMs, now) {
       if (drone.cooldown <= 0) {
         const primary = nearestEnemyTo(drone, SETTINGS.electricityRange);
         if (primary) {
-          applyDamageToEnemyRef(primary, SETTINGS.electricityDamage);
+          applyDamageToEnemyRef(primary, SETTINGS.electricityDamage * droneMult);
           state.arcEffects.push({ x1: drone.x, y1: drone.y, x2: primary.x, y2: primary.y, life: 120 });
 
           // Optional chain: up to 2 nearby enemies.
           const candidates = state.enemies.filter((e) => e !== primary && distance(primary, e) <= SETTINGS.electricityChainRange);
           for (let i = 0; i < Math.min(2, candidates.length); i++) {
             const chainTarget = candidates[i];
-            applyDamageToEnemyRef(chainTarget, SETTINGS.electricityDamage * 0.7);
+            applyDamageToEnemyRef(chainTarget, SETTINGS.electricityDamage * 0.7 * droneMult);
             state.arcEffects.push({ x1: primary.x, y1: primary.y, x2: chainTarget.x, y2: chainTarget.y, life: 120 });
           }
 
@@ -662,7 +845,7 @@ function updateDrones(dtMs, now) {
       }
 
       if (drone.targetRef) {
-        const dpsDamage = SETTINGS.laserDps * (dtMs / 1000);
+        const dpsDamage = SETTINGS.laserDps * droneMult * (dtMs / 1000);
         applyDamageToEnemyRef(drone.targetRef, dpsDamage);
         state.beamEffects.push({ x1: drone.x, y1: drone.y, x2: drone.targetRef.x, y2: drone.targetRef.y });
       }
@@ -720,6 +903,8 @@ function resetRun() {
   state.enemyBullets = [];
   state.bombs = [];
   state.pickups = [];
+  state.rareDrops = [];
+  state.pickupLabels = [];
   state.particles = [];
   state.rings = [];
   state.drones = [];
@@ -738,6 +923,25 @@ function resetRun() {
   state.lastShotAt = 0;
   state.shake = 0;
   state.autoNextWaveAt = null;
+  state.currentWeaponSlot = 1;
+  state.weaponUnlocks = {
+    blaster: true,
+    rapid: true,
+    spread: false,
+    laser: false,
+    arc: false,
+  };
+  state.runBonuses = {
+    damageMultiplier: 0,
+    fireRateMultiplier: 0,
+    critChance: 0,
+    permanentWeaponBonus: 0,
+    droneDamageMultiplier: 0,
+    overchargeUntil: 0,
+    fireRateUntil: 0,
+    critUntil: 0,
+    dronePowerUntil: 0,
+  };
 
   Object.keys(state.upgrades).forEach((k) => { state.upgrades[k] = 0; });
 
@@ -761,6 +965,11 @@ function pauseRun() {
 }
 
 function endRun() {
+  state.highScores.bestScore = Math.max(state.highScores.bestScore, Math.floor(state.score));
+  state.highScores.highestWave = Math.max(state.highScores.highestWave, state.wave);
+  state.highScores.bestCredits = Math.max(state.highScores.bestCredits, Math.floor(state.totalCreditsEarned));
+  state.highScores.totalKillsBestRun = Math.max(state.highScores.totalKillsBestRun, state.totalKills);
+  saveHighScores();
   state.gameState = GAME_STATE.GAME_OVER;
   showGameOverMenu();
 }
@@ -796,6 +1005,8 @@ function startNextWave() {
   state.damageTakenThisWave = 0;
   state.enemyBullets = [];
   state.pickups = [];
+  state.rareDrops = [];
+  state.pickupLabels = [];
   state.autoNextWaveAt = null;
 
   spawnWave(state.wave);
@@ -827,7 +1038,8 @@ function showMainMenu() {
   state.gameState = GAME_STATE.MAIN_MENU;
   setMenu(
     'NEON RIFT ARENA',
-    'Offline neon survival prototype. Defeat waves, buy upgrades, and deploy drones.',
+    `Offline neon survival prototype. Defeat waves, buy upgrades, unlock weapons, and deploy drones.
+Best Score: ${state.highScores.bestScore} | Best Wave: ${state.highScores.highestWave} | Best Credits: ${state.highScores.bestCredits} | Best Kills: ${state.highScores.totalKillsBestRun}`,
     [
       { label: 'Start Game', onClick: startRun },
       { label: 'Settings', onClick: showSettingsMenu },
@@ -840,7 +1052,7 @@ function showHowToPlay() {
   state.gameState = GAME_STATE.HOW_TO_PLAY;
   setMenu(
     'HOW TO PLAY',
-    'Move with arrows, shoot with Space/LMB, thrust with Up/RMB. Clear waves, collect credits, buy upgrades and drone unlocks in shop, then start next wave.',
+    'Move with WASD (or arrows). Space/LMB fires your active weapon. Switch weapons with 1-5. Rare drops grant temporary and permanent run boosts.',
     [
       { label: 'Back to Main Menu', onClick: showMainMenu },
       { label: 'Start Game', onClick: startRun },
@@ -924,7 +1136,8 @@ function showPauseMenu() {
 function showGameOverMenu() {
   setMenu(
     'RIFT COLLAPSED',
-    `Wave ${state.wave} | Score ${state.score} | Credits ${state.totalCreditsEarned} | Kills ${state.totalKills} | Purchases ${state.upgradesPurchased}`,
+    `Wave ${state.wave} | Score ${state.score} | Credits ${state.totalCreditsEarned} | Kills ${state.totalKills} | Purchases ${state.upgradesPurchased}
+Best Score ${state.highScores.bestScore} | Best Wave ${state.highScores.highestWave}`,
     [
       { label: 'Restart Run', onClick: startRun },
       { label: 'Main Menu', onClick: showMainMenu },
@@ -978,19 +1191,28 @@ function spawnWave(wave) {
 // Core update systems
 // -------------------------------------------------
 function shootPlayer() {
+  const weaponId = activeWeaponId();
+  if (!state.weaponUnlocks[weaponId]) return;
+
   const now = performance.now();
   if (now - state.lastShotAt < fireDelay()) return;
 
-  const spread = state.upgrades.scatterCannon;
-  if (spread === 0) {
-    state.bullets.push(createPlayerBullet(0));
-  } else if (spread === 1) {
-    state.bullets.push(createPlayerBullet(-0.07));
-    state.bullets.push(createPlayerBullet(0.07));
+  const weapon = activeWeaponDef();
+  let bulletsPerShot = weapon.bulletsPerShot;
+
+  if (weaponId === 'spread') {
+    const extra = Math.min(2, state.upgrades.scatterCannon);
+    bulletsPerShot += extra;
+  }
+
+  if (bulletsPerShot <= 1) {
+    state.bullets.push(createPlayerBullet(0, weaponId));
   } else {
-    state.bullets.push(createPlayerBullet(-0.12));
-    state.bullets.push(createPlayerBullet(0));
-    state.bullets.push(createPlayerBullet(0.12));
+    const totalArc = weapon.spreadStep * (bulletsPerShot - 1);
+    for (let i = 0; i < bulletsPerShot; i++) {
+      const offset = -totalArc / 2 + i * weapon.spreadStep;
+      state.bullets.push(createPlayerBullet(offset, weaponId));
+    }
   }
 
   state.lastShotAt = now;
@@ -1000,8 +1222,8 @@ function updatePlayer(dtMs, now) {
   const p = state.player;
 
   let desiredAngle = p.angle;
-  if (state.keys.ArrowLeft) desiredAngle -= SETTINGS.rotationSpeed;
-  if (state.keys.ArrowRight) desiredAngle += SETTINGS.rotationSpeed;
+  if (state.keys.ArrowLeft || state.keys.a || state.keys.A) desiredAngle -= SETTINGS.rotationSpeed;
+  if (state.keys.ArrowRight || state.keys.d || state.keys.D) desiredAngle += SETTINGS.rotationSpeed;
 
   if (state.settings.mouseAim && state.mouse.hasValid) {
     const dx = state.mouse.lastValidX - p.x;
@@ -1028,7 +1250,8 @@ function updatePlayer(dtMs, now) {
   p.angle = moveAngleToward(p.angle, desiredAngle, SETTINGS.maxTurnSpeed);
 
   const thrustingByMouse = state.settings.rightMouseThrust && state.settings.mouseAim && state.mouse.rightDown;
-  const thrusting = state.keys.ArrowUp || thrustingByMouse;
+  const thrusting = state.keys.ArrowUp || state.keys.w || state.keys.W || thrustingByMouse;
+  const braking = state.keys.s || state.keys.S || state.keys.ArrowDown;
 
   if (thrusting) {
     const t = thrustPower();
@@ -1049,11 +1272,15 @@ function updatePlayer(dtMs, now) {
 
   p.vx *= SETTINGS.friction;
   p.vy *= SETTINGS.friction;
+  if (braking) {
+    p.vx *= 0.93;
+    p.vy *= 0.93;
+  }
   p.x += p.vx;
   p.y += p.vy;
   wrap(p);
 
-  if (state.settings.holdToFire && state.mouse.leftDown) {
+  if (state.settings.holdToFire && (state.mouse.leftDown || state.keys[' '])) {
     shootPlayer();
   }
 
@@ -1154,6 +1381,7 @@ function updatePickups(dtMs) {
   for (let i = state.pickups.length - 1; i >= 0; i--) {
     const orb = state.pickups[i];
     orb.life -= dtMs;
+    orb.bobTime += dtMs * 0.004;
 
     orb.x += orb.vx;
     orb.y += orb.vy;
@@ -1166,7 +1394,7 @@ function updatePickups(dtMs) {
     const dist = Math.hypot(dx, dy) || 1;
 
     if (dist < pullRadius) {
-      const pull = 0.25 + state.upgrades.magnetField * 0.07;
+      const pull = pickupPullStrength();
       orb.vx += (dx / dist) * pull;
       orb.vy += (dy / dist) * pull;
     }
@@ -1175,11 +1403,41 @@ function updatePickups(dtMs) {
       state.credits += orb.value;
       state.totalCreditsEarned += orb.value;
       addParticle(orb.x, orb.y, NEON.green, 0.2, 1.4, 180, 1.2, 2.5);
+      addPickupLabel(`+${orb.value}`, orb.x, orb.y, '#8dffb1');
       state.pickups.splice(i, 1);
       continue;
     }
 
     if (orb.life <= 0) state.pickups.splice(i, 1);
+  }
+
+  for (let i = state.rareDrops.length - 1; i >= 0; i--) {
+    const drop = state.rareDrops[i];
+    drop.life -= dtMs;
+    drop.x += drop.vx;
+    drop.y += drop.vy;
+    drop.vx *= 0.988;
+    drop.vy *= 0.988;
+    wrap(drop);
+
+    const dx = p.x - drop.x;
+    const dy = p.y - drop.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    if (dist < pullRadius * 0.88) {
+      drop.vx += (dx / dist) * pickupPullStrength() * 0.75;
+      drop.vy += (dy / dist) * pickupPullStrength() * 0.75;
+    }
+
+    if (dist < p.radius + drop.radius + 4) {
+      const def = RARE_DROP_DEFS.find((d) => d.id === drop.id);
+      if (def) def.apply();
+      addPickupLabel(drop.label, drop.x, drop.y, drop.color);
+      addExplosion(drop.x, drop.y, drop.color, 12, 24);
+      state.rareDrops.splice(i, 1);
+      continue;
+    }
+
+    if (drop.life <= 0) state.rareDrops.splice(i, 1);
   }
 }
 
@@ -1201,7 +1459,33 @@ function updateFx(dtMs) {
     if (r.life <= 0) state.rings.splice(i, 1);
   }
 
+  for (let i = state.pickupLabels.length - 1; i >= 0; i--) {
+    const label = state.pickupLabels[i];
+    label.life -= dtMs;
+    label.y += label.vy;
+    if (label.life <= 0) state.pickupLabels.splice(i, 1);
+  }
+
   state.shake = Math.max(0, state.shake - dtMs * 0.035);
+}
+
+function updateRunBonuses(now) {
+  if (state.runBonuses.overchargeUntil && now >= state.runBonuses.overchargeUntil) {
+    state.runBonuses.damageMultiplier = 0;
+    state.runBonuses.overchargeUntil = 0;
+  }
+  if (state.runBonuses.fireRateUntil && now >= state.runBonuses.fireRateUntil) {
+    state.runBonuses.fireRateMultiplier = 0;
+    state.runBonuses.fireRateUntil = 0;
+  }
+  if (state.runBonuses.critUntil && now >= state.runBonuses.critUntil) {
+    state.runBonuses.critChance = 0;
+    state.runBonuses.critUntil = 0;
+  }
+  if (state.runBonuses.dronePowerUntil && now >= state.runBonuses.dronePowerUntil) {
+    state.runBonuses.droneDamageMultiplier = 0;
+    state.runBonuses.dronePowerUntil = 0;
+  }
 }
 
 function damagePlayer(amount) {
@@ -1248,8 +1532,9 @@ function killEnemy(index, enemy) {
   state.totalKills += 1;
   state.score += enemy.scoreValue;
 
-  const credits = Math.round(enemy.creditValue * SETTINGS.killCreditMultiplier * salvageMultiplier());
+  const credits = Math.round(enemy.creditValue * SETTINGS.killCreditMultiplier);
   spawnCreditPickup(enemy.x, enemy.y, credits);
+  spawnRareDrop(enemy.x, enemy.y, enemy.typeId);
 
   const colorMap = {
     driftRock: '#9ebfff',
@@ -1280,6 +1565,7 @@ function killEnemy(index, enemy) {
 function handleCollisions() {
   for (let b = state.bullets.length - 1; b >= 0; b--) {
     const bullet = state.bullets[b];
+    let bulletConsumed = false;
 
     for (let e = state.enemies.length - 1; e >= 0; e--) {
       const enemy = state.enemies[e];
@@ -1289,8 +1575,27 @@ function handleCollisions() {
       if (enemy.hp <= 0) killEnemy(e, enemy);
       else addExplosion(enemy.x, enemy.y, NEON.blue, 6, 18);
 
-      state.bullets.splice(b, 1);
-      break;
+      if (bullet.splashRadius > 0) {
+        for (const other of state.enemies) {
+          if (other === enemy) continue;
+          const d = distance(enemy, other);
+          if (d <= bullet.splashRadius) {
+            applyDamageToEnemyRef(other, bullet.damage * (1 - d / bullet.splashRadius) * 0.65);
+          }
+        }
+        addExplosion(enemy.x, enemy.y, '#8ac4ff', 14, bullet.splashRadius * 0.44);
+        bulletConsumed = true;
+      } else if (bullet.pierce > 0) {
+        bullet.pierce -= 1;
+        bullet.damage *= 0.94;
+      } else {
+        bulletConsumed = true;
+      }
+
+      if (bulletConsumed) {
+        state.bullets.splice(b, 1);
+        break;
+      }
     }
   }
 
@@ -1348,14 +1653,19 @@ function buyUpgrade(id) {
   const def = UPGRADE_DEFS.find((u) => u.id === id);
   if (!def || !canShowUpgrade(def)) return;
 
-  if (upgradeLevel(def.id) >= def.maxLevel) return;
+  if (def.maxLevel !== null && upgradeLevel(def.id) >= def.maxLevel) return;
   const cost = upgradeCost(def);
   if (state.credits < cost) return;
 
   state.credits -= cost;
+  const beforeLevel = upgradeLevel(id);
   def.apply();
   state.upgradesPurchased += 1;
-  state.upgrades[id] = Math.min(def.maxLevel, state.upgrades[id] + 1);
+  if (upgradeLevel(id) === beforeLevel) {
+    state.upgrades[id] = def.maxLevel === null
+      ? state.upgrades[id] + 1
+      : Math.min(def.maxLevel, state.upgrades[id] + 1);
+  }
 
   if (state.settings.autoStartNextWave) {
     state.autoNextWaveAt = performance.now() + 6000;
@@ -1373,7 +1683,7 @@ function buildShopButtons() {
   UPGRADE_DEFS.filter(canShowUpgrade).forEach((def) => {
     const lvl = upgradeLevel(def.id);
     const cost = upgradeCost(def);
-    const capped = lvl >= def.maxLevel;
+    const capped = def.maxLevel !== null && lvl >= def.maxLevel;
 
     const btn = document.createElement('button');
     btn.className = 'shop-btn';
@@ -1383,7 +1693,7 @@ function buildShopButtons() {
       <div><strong>${def.name}</strong></div>
       <div>${def.desc}</div>
       <div class="cost">Cost: ${capped ? 'MAX' : cost}</div>
-      <div class="owned">Tier: ${lvl}/${def.maxLevel}</div>
+      <div class="owned">Tier: ${def.maxLevel === null ? `${lvl} (repeatable)` : `${lvl}/${def.maxLevel}`}</div>
     `;
 
     btn.addEventListener('click', () => buyUpgrade(def.id));
@@ -1397,10 +1707,19 @@ function buildShopButtons() {
 function renderUpgradeList() {
   const lines = UPGRADE_DEFS
     .filter((u) => upgradeLevel(u.id) > 0)
-    .map((u) => `${u.name}: ${upgradeLevel(u.id)}/${u.maxLevel}`);
+    .map((u) => `${u.name}: ${u.maxLevel === null ? `${upgradeLevel(u.id)} (repeatable)` : `${upgradeLevel(u.id)}/${u.maxLevel}`}`);
 
-  upgradeListEl.innerHTML = lines.length
-    ? lines.map((l) => `<li>${l}</li>`).join('')
+  const bonusLines = [];
+  if (state.runBonuses.damageMultiplier > 0) bonusLines.push(`Temp Overcharge: +${Math.round(state.runBonuses.damageMultiplier * 100)}% dmg`);
+  if (state.runBonuses.fireRateMultiplier > 0) bonusLines.push(`Fire Rate Boost: +${Math.round(state.runBonuses.fireRateMultiplier * 100)}%`);
+  if (state.runBonuses.critChance > 0) bonusLines.push(`Critical Focus: ${Math.round(state.runBonuses.critChance * 100)}% crit`);
+  if (state.runBonuses.droneDamageMultiplier > 0) bonusLines.push(`Drone Enhancement: +${Math.round(state.runBonuses.droneDamageMultiplier * 100)}%`);
+  if (state.runBonuses.permanentWeaponBonus > 0) bonusLines.push(`Weapon Core +: +${Math.round(state.runBonuses.permanentWeaponBonus * 100)}% permanent dmg`);
+
+  const allLines = [...lines, ...bonusLines];
+
+  upgradeListEl.innerHTML = allLines.length
+    ? allLines.map((l) => `<li>${l}</li>`).join('')
     : '<li>None purchased</li>';
 }
 
@@ -1412,14 +1731,23 @@ function updateHud() {
   shieldEl.textContent = String(state.player ? Math.round(state.player.shield) : 0);
   creditsEl.textContent = String(Math.floor(state.credits));
   weaponEl.textContent = weaponName();
+  weaponSlotsEl.innerHTML = WEAPON_SLOTS.map((weaponId, idx) => {
+    const slot = idx + 1;
+    const locked = !state.weaponUnlocks[weaponId];
+    const classes = slot === state.currentWeaponSlot ? 'slot-active' : '';
+    const lockTxt = locked ? '🔒' : '';
+    return `<span class="${classes}">${slot}:${WEAPON_DEFS[weaponId].label}${lockTxt}</span>`;
+  }).join(' | ');
   dronesEl.textContent = droneLabelList();
+  bestScoreEl.textContent = String(state.highScores.bestScore);
+  bestWaveEl.textContent = String(state.highScores.highestWave);
 }
 
 // -------------------------------------------------
 // Input
 // -------------------------------------------------
 window.addEventListener('keydown', (event) => {
-  if (['ArrowUp', 'ArrowLeft', 'ArrowRight', ' '].includes(event.key)) event.preventDefault();
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D'].includes(event.key)) event.preventDefault();
   state.keys[event.key] = true;
 
   if (event.key === 'm' || event.key === 'M') {
@@ -1440,6 +1768,17 @@ window.addEventListener('keydown', (event) => {
 
   if (state.gameState === GAME_STATE.PLAYING && event.key === ' ') {
     shootPlayer();
+    return;
+  }
+
+  if (state.gameState === GAME_STATE.PLAYING && ['1', '2', '3', '4', '5'].includes(event.key)) {
+    const slot = Number(event.key);
+    const weaponId = WEAPON_SLOTS[slot - 1];
+    state.currentWeaponSlot = slot;
+    if (!state.weaponUnlocks[weaponId]) {
+      addPickupLabel(`${WEAPON_DEFS[weaponId].label} locked`, state.player.x, state.player.y - 16, '#ffb0d1');
+    }
+    updateHud();
     return;
   }
 
@@ -1596,7 +1935,7 @@ function drawPlayer(now) {
   ctx.stroke();
 
   const thrustingByMouse = state.settings.rightMouseThrust && state.settings.mouseAim && state.mouse.rightDown;
-  if (state.keys.ArrowUp || thrustingByMouse) {
+  if (state.keys.ArrowUp || state.keys.w || state.keys.W || thrustingByMouse) {
     neonStroke(NEON.yellow, 2, 14);
     ctx.beginPath();
     ctx.moveTo(-p.radius * 0.8, 0);
@@ -1695,6 +2034,19 @@ function drawEnemies(now) {
 
 function drawProjectiles() {
   for (const b of state.bullets) {
+    if (b.weaponId === 'laser') {
+      ctx.strokeStyle = 'rgba(166, 255, 255, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      if (b.trail.length > 0) {
+        ctx.moveTo(b.trail[0].x, b.trail[0].y);
+        ctx.lineTo(b.x, b.y);
+      } else {
+        ctx.moveTo(b.x, b.y);
+        ctx.lineTo(b.x - b.vx * 2, b.y - b.vy * 2);
+      }
+      ctx.stroke();
+    }
     ctx.strokeStyle = 'rgba(177,231,255,0.45)';
     ctx.lineWidth = 1.2;
     ctx.beginPath();
@@ -1734,15 +2086,36 @@ function drawProjectiles() {
 
 function drawPickups(now) {
   for (const orb of state.pickups) {
-    const pulse = 0.4 + 0.6 * Math.sin(now * 0.008 + orb.x * 0.03);
+    const pulse = 0.4 + 0.6 * Math.sin(now * 0.008 + orb.x * 0.03 + orb.bobTime);
     const size = orb.radius + pulse;
+    const yOffset = Math.sin(orb.bobTime) * 1.6;
 
     ctx.fillStyle = NEON.green;
     ctx.shadowColor = NEON.green;
-    ctx.shadowBlur = 12 * glowScale();
+    ctx.shadowBlur = PICKUP_SETTINGS.moneyOrbGlowSize * glowScale();
     ctx.beginPath();
-    ctx.arc(orb.x, orb.y, size, 0, Math.PI * 2);
+    ctx.arc(orb.x, orb.y + yOffset, size, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  for (const drop of state.rareDrops) {
+    const blink = 0.72 + 0.28 * Math.sin(now * 0.012 + drop.x * 0.01);
+    const size = drop.radius * blink;
+    ctx.save();
+    ctx.translate(drop.x, drop.y);
+    ctx.rotate(now * 0.0028);
+    ctx.strokeStyle = drop.color;
+    ctx.lineWidth = 2;
+    ctx.shadowColor = drop.color;
+    ctx.shadowBlur = 16 * glowScale();
+    ctx.beginPath();
+    ctx.moveTo(0, -size);
+    ctx.lineTo(size, 0);
+    ctx.lineTo(0, size);
+    ctx.lineTo(-size, 0);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
   }
 
   ctx.shadowBlur = 0;
@@ -1830,6 +2203,16 @@ function drawWaveBanner() {
   ctx.restore();
 }
 
+function renderPickupLabels() {
+  const rect = canvas.getBoundingClientRect();
+  pickupLabelsEl.innerHTML = state.pickupLabels.map((label) => {
+    const px = (label.x / canvas.width) * rect.width;
+    const py = (label.y / canvas.height) * rect.height;
+    const alpha = clamp(label.life / label.maxLife, 0, 1);
+    return `<div class="pickup-label" style="left:${px}px;top:${py}px;color:${label.color};opacity:${alpha.toFixed(2)};">${label.text}</div>`;
+  }).join('');
+}
+
 function drawCrosshair() {
   if (!state.settings.mouseAim || state.gameState !== GAME_STATE.PLAYING || !state.mouse.hasValid) return;
 
@@ -1867,6 +2250,7 @@ function draw(now) {
   drawPlayer(now);
   drawCrosshair();
   drawWaveBanner();
+  renderPickupLabels();
 
   ctx.restore();
 }
@@ -1889,6 +2273,7 @@ function update(now, dtMs) {
   updateBombs(dtMs);
   updateDrones(dtMs, now);
   updatePickups(dtMs);
+  updateRunBonuses(now);
   handleCollisions();
   updateFx(dtMs);
 
@@ -1897,6 +2282,7 @@ function update(now, dtMs) {
   }
 
   updateHud();
+  renderUpgradeList();
 }
 
 function frame(now) {
@@ -1914,6 +2300,7 @@ function frame(now) {
 // -------------------------------------------------
 function init() {
   loadSettings();
+  loadHighScores();
   applySettingsToUI();
 
   state.player = createPlayer();
