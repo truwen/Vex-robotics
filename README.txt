@@ -12,6 +12,7 @@ Core additions in this build
 - repeatable upgrades to reduce progression stall after capped upgrades
 - keyboard flight upgrades (WASD + Space) while preserving optional mouse mode
 - persistent settings + persistent high scores via localStorage
+- retro-style Web Audio API SFX + lightweight ambient music
 
 Controls
 --------
@@ -67,6 +68,11 @@ Persistence (localStorage keys)
 -------------------------------
 - Settings key: `neon_rift_arena_settings_v1`
 - High score key: `neon_rift_arena_high_scores_v1`
+- Audio settings are stored inside the settings object:
+  - `soundEnabled`
+  - `sfxVolume`
+  - `musicEnabled`
+  - `musicVolume`
 
 High scores saved:
 - best score
@@ -83,6 +89,22 @@ In `script.js`:
 - `SETTINGS` (player/enemy/economy/drone/visual tuning)
 - `SHOP_LAYOUT` (shop rows/height/footer)
 - `HIGH_SCORE_STORAGE_KEY`, `SETTINGS_STORAGE_KEY`
+- `AUDIO_LIMITS` (shot/hover/pickup anti-spam gaps)
+
+Audio system notes
+------------------
+- Uses Web Audio API only (no external files/libraries).
+- Audio starts after first user gesture (click/key/touch) to satisfy browser autoplay rules.
+- SFX events include:
+  - weapon fire (per-weapon variants)
+  - enemy hit / enemy destroyed
+  - player hit / shield hit
+  - money orb pickup / rare pickup
+  - shop purchase
+  - wave clear
+  - game over
+  - menu hover / click
+- Ambient looping synth pad is optional via settings (`Music` toggle + music volume).
 
 GitHub Pages / static hosting
 -----------------------------
