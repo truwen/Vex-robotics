@@ -407,3 +407,15 @@ body {
   letter-spacing: 0.02em;
   text-shadow: 0 0 12px rgba(255, 255, 255, 0.9), 0 0 22px rgba(255, 226, 122, 0.7);
 }
+
+.build-info {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  font-size: 0.72rem;
+  color: rgba(210, 227, 255, 0.62);
+  letter-spacing: 0.03em;
+  pointer-events: none;
+  user-select: none;
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.55);
+}
