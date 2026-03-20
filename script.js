@@ -146,11 +146,38 @@ const RIFT_ENABLED = true;
 const RIFT_CENTER_X = 0.5; // normalized (0-1) or absolute px if > 1
 const RIFT_CENTER_Y = 0.42; // normalized (0-1) or absolute px if > 1
 const RIFT_SCALE = 1;
-const RIFT_PURPLE_INTENSITY = 0.92;
-const RIFT_GREEN_INTENSITY = 0.78;
-const RIFT_PULSE_SPEED = 0.0017;
-const RIFT_OPACITY = 0.46;
+const RIFT_PURPLE_INTENSITY = 1.24;
+const RIFT_GREEN_INTENSITY = 1.06;
+const RIFT_PULSE_SPEED = 0.0023;
+const RIFT_OPACITY = 0.56;
 const STAR_DENSITY = 1;
+const PLAYER_SPAWN_INVULN_DURATION = 2400;
+
+const MAX_ACTIVE_PARTICLES = 900;
+const MAX_ACTIVE_PICKUPS = 260;
+const MAX_ACTIVE_FLOATING_TEXTS = 80;
+const MAX_ACTIVE_ENEMIES = 340;
+const MAX_ACTIVE_ENEMY_PROJECTILES = 320;
+const ENEMY_OUT_OF_BOUNDS_TIMEOUT = 2600;
+const PLAYER_BOUNDARY_PADDING = 12;
+const ENEMY_BOUNDARY_PADDING = 8;
+const PROJECTILE_DESPAWN_MARGIN = 40;
+const WEAPON_VISUAL_SCALE = 1;
+
+const WEAPON_BALANCE_VALUES = {
+  blaster: { damage: 1.2, fireDelayMs: 200, speed: 9.4, spread: 0, pierce: 0, splash: 0 },
+  rapid: { damage: 0.56, fireDelayMs: 92, speed: 10.8, spread: 0, pierce: 0, splash: 0 },
+  spread: { damage: 0.8, fireDelayMs: 250, speed: 8.2, spread: 0.19, pierce: 0, splash: 0 },
+  laser: { damage: 1.05, fireDelayMs: 190, speed: 13.4, spread: 0, pierce: 4, splash: 0 },
+  arc: { damage: 1.45, fireDelayMs: 305, speed: 8.6, spread: 0, pierce: 0, splash: 94 },
+};
+
+const PLAYER_RING_OUTER_RADIUS = 25;
+const PLAYER_RING_INNER_RADIUS = 20;
+const PLAYER_RING_WIDTH = 3;
+const SHIELD_RING_COLOR = '#63c9ff';
+const HEALTH_RING_COLOR = '#79ffbc';
+const PLAYER_RING_ALPHA = 0.78;
 
 // Mouse-aim tuning (kept outside SETTINGS for easy visibility while tuning controls)
 const MOUSE_AIM_DEADZONE = 52; // px radius around ship where aim will not update
@@ -203,11 +230,11 @@ const HIGH_SCORE_STORAGE_KEY = 'neon_rift_arena_high_scores_v1';
 
 const WEAPON_SLOTS = ['blaster', 'rapid', 'spread', 'laser', 'arc'];
 const WEAPON_DEFS = {
-  blaster: { label: 'Blaster', fireDelayMs: 200, bulletDamage: 1.25, bulletSpeed: 9.3, bulletsPerShot: 1, spreadStep: 0, pierce: 0 },
-  rapid: { label: 'Rapid Blaster', fireDelayMs: 95, bulletDamage: 0.62, bulletSpeed: 10.5, bulletsPerShot: 1, spreadStep: 0, pierce: 0 },
-  spread: { label: 'Spread Blaster', fireDelayMs: 235, bulletDamage: 0.92, bulletSpeed: 8.5, bulletsPerShot: 3, spreadStep: 0.17, pierce: 0 },
-  laser: { label: 'Laser Beam', fireDelayMs: 170, bulletDamage: 0.8, bulletSpeed: 13.5, bulletsPerShot: 1, spreadStep: 0, pierce: 3 },
-  arc: { label: 'Arc Cannon', fireDelayMs: 285, bulletDamage: 1.7, bulletSpeed: 8.8, bulletsPerShot: 1, spreadStep: 0, pierce: 0, splashRadius: 82 },
+  blaster: { label: 'Blaster', fireDelayMs: WEAPON_BALANCE_VALUES.blaster.fireDelayMs, bulletDamage: WEAPON_BALANCE_VALUES.blaster.damage, bulletSpeed: WEAPON_BALANCE_VALUES.blaster.speed, bulletsPerShot: 1, spreadStep: WEAPON_BALANCE_VALUES.blaster.spread, pierce: WEAPON_BALANCE_VALUES.blaster.pierce, color: '#dff6ff', trail: 'rgba(177,231,255,0.45)', impact: '#9be8ff' },
+  rapid: { label: 'Rapid Blaster', fireDelayMs: WEAPON_BALANCE_VALUES.rapid.fireDelayMs, bulletDamage: WEAPON_BALANCE_VALUES.rapid.damage, bulletSpeed: WEAPON_BALANCE_VALUES.rapid.speed, bulletsPerShot: 1, spreadStep: WEAPON_BALANCE_VALUES.rapid.spread, pierce: WEAPON_BALANCE_VALUES.rapid.pierce, color: '#d6ff7b', trail: 'rgba(214,255,123,0.38)', impact: '#ccff88' },
+  spread: { label: 'Spread Blaster', fireDelayMs: WEAPON_BALANCE_VALUES.spread.fireDelayMs, bulletDamage: WEAPON_BALANCE_VALUES.spread.damage, bulletSpeed: WEAPON_BALANCE_VALUES.spread.speed, bulletsPerShot: 3, spreadStep: WEAPON_BALANCE_VALUES.spread.spread, pierce: WEAPON_BALANCE_VALUES.spread.pierce, color: '#ffb8e0', trail: 'rgba(255,184,224,0.35)', impact: '#ff98d9' },
+  laser: { label: 'Laser Beam', fireDelayMs: WEAPON_BALANCE_VALUES.laser.fireDelayMs, bulletDamage: WEAPON_BALANCE_VALUES.laser.damage, bulletSpeed: WEAPON_BALANCE_VALUES.laser.speed, bulletsPerShot: 1, spreadStep: WEAPON_BALANCE_VALUES.laser.spread, pierce: WEAPON_BALANCE_VALUES.laser.pierce, color: '#8affff', trail: 'rgba(138,255,255,0.5)', impact: '#82f6ff' },
+  arc: { label: 'Arc Cannon', fireDelayMs: WEAPON_BALANCE_VALUES.arc.fireDelayMs, bulletDamage: WEAPON_BALANCE_VALUES.arc.damage, bulletSpeed: WEAPON_BALANCE_VALUES.arc.speed, bulletsPerShot: 1, spreadStep: WEAPON_BALANCE_VALUES.arc.spread, pierce: WEAPON_BALANCE_VALUES.arc.pierce, splashRadius: WEAPON_BALANCE_VALUES.arc.splash, color: '#a790ff', trail: 'rgba(167,144,255,0.42)', impact: '#b8a7ff' },
 };
 
 const PICKUP_SETTINGS = {
@@ -744,6 +771,32 @@ function wrap(obj) {
   if (obj.y > canvas.height + m) obj.y = -m;
 }
 
+function clampToArena(obj, padding = 0, bounce = 0) {
+  const minX = (obj.radius || 0) + padding;
+  const maxX = canvas.width - (obj.radius || 0) - padding;
+  const minY = (obj.radius || 0) + padding;
+  const maxY = canvas.height - (obj.radius || 0) - padding;
+
+  if (obj.x < minX) {
+    obj.x = minX;
+    if (obj.vx !== undefined) obj.vx = Math.abs(obj.vx || 0) * bounce;
+  } else if (obj.x > maxX) {
+    obj.x = maxX;
+    if (obj.vx !== undefined) obj.vx = -Math.abs(obj.vx || 0) * bounce;
+  }
+  if (obj.y < minY) {
+    obj.y = minY;
+    if (obj.vy !== undefined) obj.vy = Math.abs(obj.vy || 0) * bounce;
+  } else if (obj.y > maxY) {
+    obj.y = maxY;
+    if (obj.vy !== undefined) obj.vy = -Math.abs(obj.vy || 0) * bounce;
+  }
+}
+
+function isOutsideDespawnMargin(obj, margin = PROJECTILE_DESPAWN_MARGIN) {
+  return obj.x < -margin || obj.x > canvas.width + margin || obj.y < -margin || obj.y > canvas.height + margin;
+}
+
 function normalizeAngle(angle) {
   let a = angle;
   while (a > Math.PI) a -= Math.PI * 2;
@@ -788,6 +841,9 @@ function maybeShake(amount) {
 }
 
 function addParticle(x, y, color, speedMin, speedMax, lifeMs, sizeMin = 1, sizeMax = 3.2, glow = 10) {
+  if (state.particles.length >= MAX_ACTIVE_PARTICLES) {
+    state.particles.splice(0, state.particles.length - MAX_ACTIVE_PARTICLES + 1);
+  }
   const ang = rand(0, Math.PI * 2);
   const sp = rand(speedMin, speedMax);
   state.particles.push({ x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, life: lifeMs, maxLife: lifeMs, size: rand(sizeMin, sizeMax), color, glow });
@@ -880,6 +936,7 @@ function applySettingsToUI() {
 }
 
 function addPickupLabel(text, x, y, color = '#eafff5', emphasis = 'normal') {
+  if (state.pickupLabels.length >= MAX_ACTIVE_FLOATING_TEXTS) state.pickupLabels.shift();
   state.pickupLabels.push({
     text,
     x,
@@ -1030,6 +1087,7 @@ function createPlayerBullet(offsetAngle = 0, weaponId = activeWeaponId()) {
 }
 
 function createEnemyBullet(enemy, angleToPlayer) {
+  if (state.enemyBullets.length >= MAX_ACTIVE_ENEMY_PROJECTILES) return null;
   const scale = waveScale();
   const speed = (3.4 + state.wave * 0.08) * scale.projectile * (enemy.elite ? 1.1 : 1);
   return {
@@ -1044,6 +1102,7 @@ function createEnemyBullet(enemy, angleToPlayer) {
 }
 
 function spawnCreditPickup(x, y, value) {
+  if (state.pickups.length >= MAX_ACTIVE_PICKUPS) return;
   const scaled = Math.round(value * rand(PICKUP_SETTINGS.moneyOrbValueMinScale, PICKUP_SETTINGS.moneyOrbValueMaxScale) * salvageMultiplier());
   state.pickups.push({
     kind: 'money',
@@ -1059,6 +1118,7 @@ function spawnCreditPickup(x, y, value) {
 }
 
 function spawnRareDrop(x, y, enemyTypeId) {
+  if (state.rareDrops.length >= MAX_ACTIVE_PICKUPS) return;
   let chance = RARE_DROP_CHANCE.base;
   if (enemyTypeId === 'bulwark') chance += RARE_DROP_CHANCE.bulwarkBonus;
   if (enemyTypeId === 'splitterCore') chance += RARE_DROP_CHANCE.splitterBonus;
@@ -1264,7 +1324,10 @@ function updateBombs(dtMs) {
     const bomb = state.bombs[i];
     bomb.x += bomb.vx;
     bomb.y += bomb.vy;
-    wrap(bomb);
+    if (isOutsideDespawnMargin(bomb, PROJECTILE_DESPAWN_MARGIN)) {
+      state.bombs.splice(i, 1);
+      continue;
+    }
     bomb.life -= dtMs;
 
     let exploded = false;
@@ -1411,6 +1474,7 @@ function startNextWave() {
   state.rareDrops = [];
   state.pickupLabels = [];
   state.autoNextWaveAt = null;
+  state.player.invincibleUntil = performance.now() + PLAYER_SPAWN_INVULN_DURATION;
 
   spawnWave(state.wave);
   shopOverlay.classList.add('hidden');
@@ -1620,6 +1684,10 @@ function spawnWave(wave) {
     const p = randomEdgePoint();
     state.enemies.push(createEnemy('pulseTurret', p.x, p.y, wave));
   }
+
+  if (state.enemies.length > MAX_ACTIVE_ENEMIES) {
+    state.enemies.length = MAX_ACTIVE_ENEMIES;
+  }
 }
 
 // -------------------------------------------------
@@ -1726,7 +1794,7 @@ function updatePlayer(dtMs, now) {
   }
   p.x += p.vx;
   p.y += p.vy;
-  wrap(p);
+  clampToArena(p, PLAYER_BOUNDARY_PADDING, 0.2);
 
   if (state.settings.holdToFire && (state.mouse.leftDown || state.keys[' '])) {
     shootPlayer();
@@ -1754,7 +1822,7 @@ function updateEnemies(now) {
       e.x += e.vx;
       e.y += e.vy;
       e.angle += e.spin;
-      wrap(e);
+      clampToArena(e, ENEMY_BOUNDARY_PADDING, 0.25);
       continue;
     }
 
@@ -1764,7 +1832,7 @@ function updateEnemies(now) {
       e.vy = ny * sp;
       e.x += e.vx;
       e.y += e.vy;
-      wrap(e);
+      clampToArena(e, ENEMY_BOUNDARY_PADDING, 0.25);
       continue;
     }
 
@@ -1774,7 +1842,7 @@ function updateEnemies(now) {
       e.vy = ny * sp;
       e.x += e.vx;
       e.y += e.vy;
-      wrap(e);
+      clampToArena(e, ENEMY_BOUNDARY_PADDING, 0.25);
       continue;
     }
 
@@ -1790,11 +1858,12 @@ function updateEnemies(now) {
       }
       e.x += e.vx;
       e.y += e.vy;
-      wrap(e);
+      clampToArena(e, ENEMY_BOUNDARY_PADDING, 0.2);
 
       if (now - e.lastShotAt > e.shootCooldown) {
         e.lastShotAt = now;
-        state.enemyBullets.push(createEnemyBullet(e, Math.atan2(dy, dx)));
+        const shot = createEnemyBullet(e, Math.atan2(dy, dx));
+        if (shot) state.enemyBullets.push(shot);
       }
     }
   }
@@ -1808,7 +1877,10 @@ function updateProjectiles(dtMs) {
 
     b.x += b.vx;
     b.y += b.vy;
-    wrap(b);
+    if (isOutsideDespawnMargin(b)) {
+      state.bullets.splice(i, 1);
+      continue;
+    }
     b.life -= dtMs;
     if (b.life <= 0) state.bullets.splice(i, 1);
   }
@@ -1817,7 +1889,10 @@ function updateProjectiles(dtMs) {
     const b = state.enemyBullets[i];
     b.x += b.vx;
     b.y += b.vy;
-    wrap(b);
+    if (isOutsideDespawnMargin(b)) {
+      state.enemyBullets.splice(i, 1);
+      continue;
+    }
     b.life -= dtMs;
     if (b.life <= 0) state.enemyBullets.splice(i, 1);
   }
@@ -1836,7 +1911,7 @@ function updatePickups(dtMs) {
     orb.y += orb.vy;
     orb.vx *= 0.99;
     orb.vy *= 0.99;
-    wrap(orb);
+    clampToArena(orb, 0, 0.1);
 
     const dx = p.x - orb.x;
     const dy = p.y - orb.y;
@@ -1868,7 +1943,7 @@ function updatePickups(dtMs) {
     drop.y += drop.vy;
     drop.vx *= 0.988;
     drop.vy *= 0.988;
-    wrap(drop);
+    clampToArena(drop, 0, 0.12);
 
     const dx = p.x - drop.x;
     const dy = p.y - drop.y;
@@ -2029,11 +2104,12 @@ function handleCollisions() {
     for (let e = state.enemies.length - 1; e >= 0; e--) {
       const enemy = state.enemies[e];
       if (!circlesHit(bullet, enemy)) continue;
+      const wdef = WEAPON_DEFS[bullet.weaponId] || WEAPON_DEFS.blaster;
 
       enemy.hp -= bullet.damage;
       if (enemy.hp <= 0) killEnemy(e, enemy);
       else {
-        addExplosion(enemy.x, enemy.y, NEON.blue, 6, 18);
+        addExplosion(enemy.x, enemy.y, wdef.impact, bullet.weaponId === 'rapid' ? 4 : 7, bullet.weaponId === 'arc' ? 26 : 18);
         if (audio.canPlay('enemy_hit', 22)) audio.play('enemy_hit', { pan: clamp((enemy.x / canvas.width) * 2 - 1, -1, 1) });
       }
 
@@ -2077,6 +2153,38 @@ function handleCollisions() {
     enemy.hp -= 2;
     if (enemy.hp <= 0) killEnemy(i, enemy);
   }
+}
+
+function cleanupEnemiesAndState(dtMs) {
+  for (let i = state.enemies.length - 1; i >= 0; i--) {
+    const e = state.enemies[i];
+    if (!e || !Number.isFinite(e.x) || !Number.isFinite(e.y) || e.hp <= 0 || !Number.isFinite(e.hp)) {
+      state.enemies.splice(i, 1);
+      continue;
+    }
+
+    const outside = e.x < -ENEMY_BOUNDARY_PADDING
+      || e.x > canvas.width + ENEMY_BOUNDARY_PADDING
+      || e.y < -ENEMY_BOUNDARY_PADDING
+      || e.y > canvas.height + ENEMY_BOUNDARY_PADDING;
+
+    if (outside) {
+      e.outOfBoundsMs = (e.outOfBoundsMs || 0) + dtMs;
+      if (e.outOfBoundsMs > ENEMY_OUT_OF_BOUNDS_TIMEOUT) {
+        state.enemies.splice(i, 1);
+      }
+    } else {
+      e.outOfBoundsMs = 0;
+    }
+  }
+}
+
+function livingEnemyCount() {
+  let alive = 0;
+  for (const e of state.enemies) {
+    if (e && Number.isFinite(e.hp) && e.hp > 0) alive += 1;
+  }
+  return alive;
 }
 
 function finishWave() {
@@ -2517,13 +2625,42 @@ function drawPlayer(now) {
 
   ctx.restore();
 
-  if (p.shield > 0) {
-    const a = 0.3 + 0.35 * Math.sin(now * 0.008);
-    neonStroke(`rgba(99,233,255,${a})`, 2, 14);
+  const healthPct = clamp(p.health / Math.max(1, p.maxHealth), 0, 1);
+  const shieldPct = clamp(p.shield / Math.max(1, p.maxShield || 1), 0, 1);
+  const startAngle = -Math.PI / 2;
+
+  // Background capacity arcs
+  ctx.lineWidth = PLAYER_RING_WIDTH;
+  ctx.globalAlpha = PLAYER_RING_ALPHA * 0.26;
+  ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, PLAYER_RING_OUTER_RADIUS, startAngle, startAngle + Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, PLAYER_RING_INNER_RADIUS, startAngle, startAngle + Math.PI * 2);
+  ctx.stroke();
+
+  // Health (green) inner ring
+  ctx.globalAlpha = PLAYER_RING_ALPHA;
+  ctx.strokeStyle = HEALTH_RING_COLOR;
+  ctx.shadowColor = HEALTH_RING_COLOR;
+  ctx.shadowBlur = 10 * glowScale();
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, PLAYER_RING_INNER_RADIUS, startAngle, startAngle + Math.PI * 2 * healthPct);
+  ctx.stroke();
+
+  // Shield (blue) outer ring
+  if (p.maxShield > 0 && shieldPct > 0) {
+    ctx.globalAlpha = PLAYER_RING_ALPHA * (0.5 + shieldPct * 0.5);
+    ctx.strokeStyle = SHIELD_RING_COLOR;
+    ctx.shadowColor = SHIELD_RING_COLOR;
+    ctx.shadowBlur = 12 * glowScale();
     ctx.beginPath();
-    ctx.arc(p.x, p.y, p.radius + 6 + Math.sin(now * 0.013) * 1.5, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, PLAYER_RING_OUTER_RADIUS, startAngle, startAngle + Math.PI * 2 * shieldPct);
     ctx.stroke();
   }
+
+  ctx.globalAlpha = 1;
 
   ctx.shadowBlur = 0;
 }
@@ -2613,8 +2750,9 @@ function drawEnemies(now) {
 
 function drawProjectiles() {
   for (const b of state.bullets) {
+    const def = WEAPON_DEFS[b.weaponId] || WEAPON_DEFS.blaster;
     if (b.weaponId === 'laser') {
-      ctx.strokeStyle = 'rgba(166, 255, 255, 0.4)';
+      ctx.strokeStyle = def.trail;
       ctx.lineWidth = 1;
       ctx.beginPath();
       if (b.trail.length > 0) {
@@ -2626,7 +2764,7 @@ function drawProjectiles() {
       }
       ctx.stroke();
     }
-    ctx.strokeStyle = 'rgba(177,231,255,0.45)';
+    ctx.strokeStyle = def.trail;
     ctx.lineWidth = 1.2;
     ctx.beginPath();
     b.trail.forEach((t, idx) => {
@@ -2634,11 +2772,12 @@ function drawProjectiles() {
     });
     ctx.stroke();
 
-    ctx.fillStyle = '#dff6ff';
-    ctx.shadowColor = '#dff6ff';
-    ctx.shadowBlur = 14 * glowScale();
+    ctx.fillStyle = def.color;
+    ctx.shadowColor = def.color;
+    ctx.shadowBlur = (14 + (b.weaponId === 'arc' ? 5 : 0)) * WEAPON_VISUAL_SCALE * glowScale();
     ctx.beginPath();
-    ctx.arc(b.x, b.y, b.radius + 1.1, 0, Math.PI * 2);
+    const radiusScale = b.weaponId === 'rapid' ? 0.85 : b.weaponId === 'spread' ? 0.92 : b.weaponId === 'arc' ? 1.2 : 1;
+    ctx.arc(b.x, b.y, (b.radius + 1.1) * radiusScale * WEAPON_VISUAL_SCALE, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -2883,9 +3022,10 @@ function update(now, dtMs) {
   updatePickups(dtMs);
   updateRunBonuses(now);
   handleCollisions();
+  cleanupEnemiesAndState(dtMs);
   updateFx(dtMs);
 
-  if (state.enemies.length === 0) {
+  if (livingEnemyCount() === 0) {
     finishWave();
   }
 
