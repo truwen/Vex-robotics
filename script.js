@@ -29,6 +29,7 @@ const bestScoreEl = document.getElementById('bestScore');
 const bestWaveEl = document.getElementById('bestWave');
 const upgradeListEl = document.getElementById('upgradeList');
 const pickupLabelsEl = document.getElementById('pickupLabels');
+const buildInfoEl = document.getElementById('buildInfo');
 
 const menuOverlay = document.getElementById('menuOverlay');
 const menuCard = menuOverlay.querySelector('.menu-card');
@@ -57,6 +58,9 @@ const GAME_STATE = {
   PAUSED: 'paused',
   GAME_OVER: 'game_over',
 };
+
+const GAME_VERSION = 'v0.5';
+const BUILD_TIME = new Date().toLocaleTimeString();
 
 const SETTINGS = {
   canvasWidth: 1360,
@@ -219,6 +223,7 @@ const DEFAULT_PLAYER_SETTINGS = {
   autoStartNextWave: false,
   showDroneTargetLines: true,
   reducedFlashes: false,
+  showVersionInfo: true,
   soundEnabled: true,
   sfxVolume: 0.75,
   musicEnabled: true,
@@ -932,7 +937,16 @@ function applySettingsToUI() {
   document.documentElement.style.setProperty('--settings-footer-height', `${SETTINGS_FOOTER_HEIGHT}px`);
 
   audio.applySettings();
+  updateBuildInfo();
   buildStars();
+}
+
+function updateBuildInfo() {
+  if (!state.settings.showVersionInfo) {
+    buildInfoEl.textContent = '';
+    return;
+  }
+  buildInfoEl.textContent = `${GAME_VERSION} | ${BUILD_TIME}`;
 }
 
 function addPickupLabel(text, x, y, color = '#eafff5', emphasis = 'normal') {
@@ -1583,6 +1597,7 @@ function settingOptionButtons() {
   addToggle('Auto Start Next Wave', 'autoStartNextWave');
   addToggle('Show Drone Target Lines', 'showDroneTargetLines');
   addToggle('Reduced Flashes', 'reducedFlashes');
+  addToggle('Show Version Info', 'showVersionInfo');
   addToggle('Master Sound', 'soundEnabled');
   addCycle('SFX Volume', 'sfxVolume', [0, 0.25, 0.5, 0.75, 1]);
   addToggle('Music', 'musicEnabled');
