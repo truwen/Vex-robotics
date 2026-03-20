@@ -104,6 +104,7 @@ In `script.js`:
 - Combat readability: `WEAPON_VISUAL_SCALE`, `WEAPON_BALANCE_VALUES`
 - Player rings: `PLAYER_RING_OUTER_RADIUS`, `PLAYER_RING_INNER_RADIUS`, `PLAYER_RING_WIDTH`, `SHIELD_RING_COLOR`, `HEALTH_RING_COLOR`, `PLAYER_RING_ALPHA`
 - Wave start protection: `PLAYER_SPAWN_INVULN_DURATION`
+- Movement feel: `PLAYER_DAMPING`, `PLAYER_BRAKE_DAMPING`, `PLAYER_MIN_VELOCITY`, plus optional `classicPhysicsMode` setting
 
 Audio system notes
 ------------------
