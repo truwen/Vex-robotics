@@ -185,6 +185,15 @@ const PLAYER_RING_ALPHA = 0.78;
 const PLAYER_DAMPING = 0.95;
 const PLAYER_BRAKE_DAMPING = 0.85;
 const PLAYER_MIN_VELOCITY = 0.04;
+const ENEMY_EDGE_AVOID_RADIUS = 120;
+const ENEMY_EDGE_AVOID_FORCE = 0.07;
+const ENEMY_CENTER_BIAS = 0.02;
+const ENEMY_SEPARATION_RADIUS = 42;
+const ENEMY_SEPARATION_FORCE = 0.06;
+const AGGRESSION_SCALING_PER_WAVE = 0.015;
+const SPEED_SCALING_PER_WAVE = 0.012;
+const ELITE_CHANCE_PER_WAVE = 0.005;
+const MIXED_WAVE_COMPLEXITY_SCALING = 0.11;
 
 // Mouse-aim tuning (kept outside SETTINGS for easy visibility while tuning controls)
 const MOUSE_AIM_DEADZONE = 52; // px radius around ship where aim will not update
@@ -995,11 +1004,12 @@ function waveScale(wave = state.wave) {
   const w = Math.max(1, wave);
   return {
     hp: 1 + (w - 1) * ENDLESS_SCALING.hpPerWave,
-    speed: 1 + (w - 1) * ENDLESS_SCALING.speedPerWave,
+    speed: 1 + (w - 1) * (ENDLESS_SCALING.speedPerWave + SPEED_SCALING_PER_WAVE),
     projectile: 1 + (w - 1) * ENDLESS_SCALING.projectileSpeedPerWave,
-    fireRate: 1 + (w - 1) * ENDLESS_SCALING.fireRatePerWave,
+    fireRate: 1 + (w - 1) * (ENDLESS_SCALING.fireRatePerWave + AGGRESSION_SCALING_PER_WAVE * 0.45),
     count: 1 + (w - 1) * ENDLESS_SCALING.countPerWave,
-    eliteChance: clamp(ENDLESS_SCALING.eliteBaseChance + (w - 1) * ENDLESS_SCALING.eliteChancePerWave, 0, 0.38),
+    aggression: 1 + (w - 1) * AGGRESSION_SCALING_PER_WAVE,
+    eliteChance: clamp(ENDLESS_SCALING.eliteBaseChance + (w - 1) * (ENDLESS_SCALING.eliteChancePerWave + ELITE_CHANCE_PER_WAVE), 0, 0.45),
   };
 }
 function weaponDamageMultiplier() {
@@ -1082,6 +1092,7 @@ function createEnemy(typeId, x, y, wave) {
     shootCooldown: rand(900, 1550) / scale.fireRate / (elite ? 1.1 : 1),
     lastShotAt: 0,
     elite,
+    burstAt: performance.now() + rand(1800, 4200),
   };
 }
 
@@ -1675,7 +1686,7 @@ function randomEdgePoint() {
 function spawnWave(wave) {
   state.enemies = [];
   const scale = waveScale(wave);
-  const complexity = 1 + Math.floor(Math.max(0, wave - 4) / 4);
+  const complexity = 1 + Math.floor(Math.max(0, wave - 4) * MIXED_WAVE_COMPLEXITY_SCALING);
   const countScale = scale.count * (1 + complexity * 0.08);
 
   const driftCount = Math.floor((3 + wave * 0.9) * countScale);
@@ -1841,16 +1852,73 @@ function updatePlayer(dtMs, now) {
   }
 }
 
+function enemyEdgeAvoidance(enemy) {
+  let fx = 0;
+  let fy = 0;
+  const left = enemy.x - enemy.radius;
+  const right = canvas.width - (enemy.x + enemy.radius);
+  const top = enemy.y - enemy.radius;
+  const bottom = canvas.height - (enemy.y + enemy.radius);
+
+  if (left < ENEMY_EDGE_AVOID_RADIUS) fx += (1 - left / ENEMY_EDGE_AVOID_RADIUS) * ENEMY_EDGE_AVOID_FORCE;
+  if (right < ENEMY_EDGE_AVOID_RADIUS) fx -= (1 - right / ENEMY_EDGE_AVOID_RADIUS) * ENEMY_EDGE_AVOID_FORCE;
+  if (top < ENEMY_EDGE_AVOID_RADIUS) fy += (1 - top / ENEMY_EDGE_AVOID_RADIUS) * ENEMY_EDGE_AVOID_FORCE;
+  if (bottom < ENEMY_EDGE_AVOID_RADIUS) fy -= (1 - bottom / ENEMY_EDGE_AVOID_RADIUS) * ENEMY_EDGE_AVOID_FORCE;
+
+  // Slight center bias to reduce passive edge hugging.
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  fx += Math.sign(cx - enemy.x) * ENEMY_CENTER_BIAS;
+  fy += Math.sign(cy - enemy.y) * ENEMY_CENTER_BIAS;
+  return { fx, fy };
+}
+
+function enemySeparation(idx) {
+  const me = state.enemies[idx];
+  let fx = 0;
+  let fy = 0;
+  let nearCount = 0;
+
+  for (let i = 0; i < state.enemies.length; i++) {
+    if (i === idx) continue;
+    const other = state.enemies[i];
+    const dx = me.x - other.x;
+    const dy = me.y - other.y;
+    const distSq = dx * dx + dy * dy;
+    if (distSq <= 0 || distSq > ENEMY_SEPARATION_RADIUS * ENEMY_SEPARATION_RADIUS) continue;
+    const dist = Math.sqrt(distSq);
+    const push = (1 - dist / ENEMY_SEPARATION_RADIUS) * ENEMY_SEPARATION_FORCE;
+    fx += (dx / dist) * push;
+    fy += (dy / dist) * push;
+    nearCount += 1;
+    if (nearCount >= 8) break; // cheap cap for large waves
+  }
+  return { fx, fy };
+}
+
 function updateEnemies(now) {
   const scale = waveScale();
-  for (const e of state.enemies) {
+  for (let idx = 0; idx < state.enemies.length; idx++) {
+    const e = state.enemies[idx];
     const dx = state.player.x - e.x;
     const dy = state.player.y - e.y;
     const dist = Math.hypot(dx, dy) || 1;
     const nx = dx / dist;
     const ny = dy / dist;
+    const edge = enemyEdgeAvoidance(e);
+    const sep = enemySeparation(idx);
+    const aggression = scale.aggression * (e.elite ? 1.12 : 1);
 
     if (e.typeId === 'driftRock' || e.typeId === 'splitterCore') {
+      // Previously these could drift into passive edge loops. Add active steering.
+      e.vx += nx * 0.02 * aggression + edge.fx + sep.fx;
+      e.vy += ny * 0.02 * aggression + edge.fy + sep.fy;
+      const maxDriftSpeed = ENEMY_TYPES[e.typeId].speed * 1.4 * scale.speed;
+      const vMag = Math.hypot(e.vx, e.vy) || 1;
+      if (vMag > maxDriftSpeed) {
+        e.vx = (e.vx / vMag) * maxDriftSpeed;
+        e.vy = (e.vy / vMag) * maxDriftSpeed;
+      }
       e.x += e.vx;
       e.y += e.vy;
       e.angle += e.spin;
@@ -1860,8 +1928,8 @@ function updateEnemies(now) {
 
     if (e.typeId === 'dartScout') {
       const sp = ENEMY_TYPES.dartScout.speed * scale.speed * (e.elite ? 1.12 : 1);
-      e.vx = nx * sp;
-      e.vy = ny * sp;
+      e.vx = nx * sp + edge.fx * 1.2 + sep.fx * 1.35;
+      e.vy = ny * sp + edge.fy * 1.2 + sep.fy * 1.35;
       e.x += e.vx;
       e.y += e.vy;
       clampToArena(e, ENEMY_BOUNDARY_PADDING, 0.25);
@@ -1869,9 +1937,13 @@ function updateEnemies(now) {
     }
 
     if (e.typeId === 'bulwark') {
-      const sp = ENEMY_TYPES.bulwark.speed * scale.speed * 0.82 * (e.elite ? 1.08 : 1);
-      e.vx = nx * sp;
-      e.vy = ny * sp;
+      // Slow pressure unit with periodic charge burst and stronger inward pressure.
+      const burst = now >= e.burstAt;
+      if (burst) e.burstAt = now + rand(2400, 4300);
+      const burstMult = burst ? 1.85 : 1;
+      const sp = ENEMY_TYPES.bulwark.speed * scale.speed * aggression * 0.9 * (e.elite ? 1.08 : 1) * burstMult;
+      e.vx = nx * sp + edge.fx * 2.1 + sep.fx * 0.55;
+      e.vy = ny * sp + edge.fy * 2.1 + sep.fy * 0.55;
       e.x += e.vx;
       e.y += e.vy;
       clampToArena(e, ENEMY_BOUNDARY_PADDING, 0.25);
@@ -1885,9 +1957,13 @@ function updateEnemies(now) {
         e.vx = nx * sp;
         e.vy = ny * sp;
       } else {
-        e.vx = -ny * sp * 0.75;
-        e.vy = nx * sp * 0.75;
+        // Late waves: flank harder around the player to punish center camping.
+        const flank = 0.75 + Math.min(0.55, (state.wave - 1) * 0.014);
+        e.vx = -ny * sp * flank;
+        e.vy = nx * sp * flank;
       }
+      e.vx += edge.fx * 1.45 + sep.fx;
+      e.vy += edge.fy * 1.45 + sep.fy;
       e.x += e.vx;
       e.y += e.vy;
       clampToArena(e, ENEMY_BOUNDARY_PADDING, 0.2);
