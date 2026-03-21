@@ -59,7 +59,7 @@ const GAME_STATE = {
   GAME_OVER: 'game_over',
 };
 
-const GAME_VERSION = 'v0.5';
+const GAME_VERSION = 'v0.7';
 const BUILD_TIME = new Date().toLocaleTimeString();
 
 const SETTINGS = {
