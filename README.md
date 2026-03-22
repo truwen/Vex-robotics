@@ -55,6 +55,20 @@ Weapon balance model (v0.11+)
   - diminishing returns for sustained same-target rapid/laser pressure
   - situational bonuses/penalties based on enemy density, target durability, and range
 
+Drone roles + orbit system
+--------------------------
+- Drone roles are intentionally distinct:
+  - Bomber: slower outer-ring orbit, clustered AoE pressure
+  - Electricity: faster inner-ring orbit, frequent chain targeting
+  - Laser: mid-ring continuous single-target beam pressure
+- Orbit behavior:
+  - clockwise orbit direction
+  - smooth angular spacing around the player as drone count changes
+  - smooth radius interpolation for stable rings without snapping
+- Orbit tuning constants in `script.js`:
+  - `DRONE_ORBIT_RADIUS`
+  - `DRONE_ORBIT_SPEED`
+
 Pickups / drops
 ---------------
 Money orbs:
