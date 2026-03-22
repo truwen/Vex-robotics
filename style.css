@@ -154,6 +154,107 @@ body {
   display: none;
 }
 
+.skilltree-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 4, 10, 0.9);
+  display: grid;
+  place-items: center;
+  z-index: 7;
+}
+
+.skilltree-overlay.hidden {
+  display: none;
+}
+
+.skilltree-shell {
+  width: min(97vw, 1400px);
+  height: min(94vh, 860px);
+  display: grid;
+  grid-template-rows: 64px minmax(0, 1fr) 40px;
+  background: linear-gradient(180deg, rgba(14, 9, 30, 0.96), rgba(6, 18, 14, 0.96));
+  border: 1px solid rgba(144, 250, 168, 0.44);
+  box-shadow: 0 0 22px rgba(178, 92, 255, 0.32), 0 0 30px rgba(126, 255, 186, 0.18);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.skilltree-topbar,
+.skilltree-bottombar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(162, 118, 255, 0.24);
+  background: rgba(6, 8, 18, 0.74);
+}
+
+.skilltree-bottombar {
+  border-top: 1px solid rgba(126, 255, 186, 0.22);
+  border-bottom: none;
+  font-size: 0.8rem;
+  color: #b6c9da;
+}
+
+.skilltree-body {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr) 310px;
+  min-height: 0;
+}
+
+.skilltree-sidebar,
+.skilltree-info {
+  padding: 12px;
+  background: rgba(8, 12, 25, 0.75);
+}
+
+.skilltree-sidebar {
+  border-right: 1px solid rgba(162, 118, 255, 0.22);
+}
+
+.skilltree-info {
+  border-left: 1px solid rgba(126, 255, 186, 0.22);
+}
+
+.skilltree-cat-list,
+.skilltree-sub-list {
+  display: grid;
+  gap: 6px;
+}
+
+.skilltree-main {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  background: radial-gradient(circle at 60% 30%, rgba(128, 64, 255, 0.13), transparent 45%),
+    radial-gradient(circle at 40% 70%, rgba(84, 255, 158, 0.1), transparent 45%),
+    #060b14;
+}
+
+.skilltree-viewport {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  touch-action: none;
+}
+
+#skillTreeCanvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.skilltree-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.skilltree-build {
+  font-size: 0.76rem;
+  color: #b7d0ff;
+}
+
 .menu-card,
 .shop-card {
   width: min(92vw, 920px);
@@ -486,5 +587,16 @@ body {
   }
   .touch-controls {
     display: flex;
+  }
+  .skilltree-shell {
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+  }
+  .skilltree-body {
+    grid-template-columns: 150px minmax(0, 1fr) 220px;
+  }
+  .skilltree-bottombar {
+    font-size: 0.7rem;
   }
 }
