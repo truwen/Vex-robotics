@@ -1,7 +1,7 @@
 Neon Rift Arena (Offline, Vanilla HTML/CSS/JS)
 ===============================================
 
-Version: v0.11
+Version: v0.12
 
 Deeper progression build of Neon Rift Arena.
 Run by opening `index.html` directly (no server, no npm, no framework).
@@ -96,6 +96,15 @@ Repeatable upgrades:
 - Magnet Field / Salvage / Drone Cooldown / Scatter Pellet Velocity also soft-scale
 
 This keeps late-run choices meaningful after early capped paths fill out.
+
+Progression tiers + milestones
+------------------------------
+- Tier bands:
+  - 1–1000
+  - 1001–2000+
+- Milestones trigger every 25 waves.
+- Milestone clears grant persistent gem rewards (autosaved to active slot).
+- Wave scaling uses a softened curve to slow late-run stat inflation.
 
 Persistence (localStorage keys)
 -------------------------------
@@ -192,6 +201,15 @@ Audio system notes
   - game over
   - menu hover / click
 - Ambient looping synth pad is optional via settings (`Music` toggle + music volume).
+
+Visual direction + mobile
+-------------------------
+- Visual motifs emphasize geometric neon forms with purple + green accents.
+- Explosions use many small glowing circle particles for denser impact feedback.
+- Mobile support includes:
+  - touch controls (rotate/thrust/fire/brake),
+  - responsive HUD/panel behavior,
+  - landscape-first layout handling for coarse pointers/smaller screens.
 
 GitHub Pages / static hosting
 -----------------------------
