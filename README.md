@@ -73,6 +73,10 @@ Persistence (localStorage keys)
 -------------------------------
 - Settings key: `neon_rift_arena_settings_v1`
 - High score key: `neon_rift_arena_high_scores_v1`
+- Save slots:
+  - `neon_rift_save_slot_1`
+  - `neon_rift_save_slot_2`
+  - `neon_rift_save_slot_3`
 - Audio settings are stored inside the settings object:
   - `soundEnabled`
   - `sfxVolume`
