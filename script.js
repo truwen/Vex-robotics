@@ -30,6 +30,7 @@ const bestWaveEl = document.getElementById('bestWave');
 const upgradeListEl = document.getElementById('upgradeList');
 const pickupLabelsEl = document.getElementById('pickupLabels');
 const buildInfoEl = document.getElementById('buildInfo');
+const touchControlsEl = document.getElementById('touchControls');
 
 const menuOverlay = document.getElementById('menuOverlay');
 const menuCard = menuOverlay.querySelector('.menu-card');
@@ -59,7 +60,7 @@ const GAME_STATE = {
   GAME_OVER: 'game_over',
 };
 
-const GAME_VERSION = 'v0.11';
+const GAME_VERSION = 'v0.12';
 const BUILD_TIME = new Date().toLocaleTimeString();
 
 const SETTINGS = {
@@ -207,6 +208,10 @@ const PROJECTILE_DESPAWN_MARGIN = 40;
 const WEAPON_VISUAL_SCALE = 1;
 const DRONE_ORBIT_RADIUS = 52;
 const DRONE_ORBIT_SPEED = 0.0019;
+const PROGRESSION_TIER_ONE_MAX = 1000;
+const MILESTONE_WAVE_INTERVAL = 25;
+const MILESTONE_GEM_BASE = 3;
+const MILESTONE_GEM_PER_100_WAVES = 1;
 
 const WEAPON_BALANCE_VALUES = {
   blaster: { damage: 1.2, fireDelayMs: 200, speed: 9.4, spread: 0, pierce: 0, splash: 0 },
@@ -941,9 +946,9 @@ function addParticle(x, y, color, speedMin, speedMax, lifeMs, sizeMin = 1, sizeM
 }
 
 function addExplosion(x, y, color, count, ringSize = 30) {
-  const total = Math.floor(count * graphicsLevelFactor());
+  const total = Math.floor(count * 1.55 * graphicsLevelFactor());
   for (let i = 0; i < total; i++) {
-    addParticle(x, y, color, 0.8, 4.8, rand(220, 680));
+    addParticle(x, y, color, 0.8, 5.2, rand(220, 680), 0.8, 2.1, 14);
   }
   state.rings.push({ x, y, radius: 2, maxRadius: ringSize, life: 300, maxLife: 300, color });
 }
@@ -1104,6 +1109,15 @@ function applySettingsToUI() {
   audio.applySettings();
   updateBuildInfo();
   buildStars();
+  updateTouchControlsVisibility();
+}
+
+function updateTouchControlsVisibility() {
+  if (!touchControlsEl) return;
+  const touchDevice = window.matchMedia('(pointer: coarse)').matches
+    || window.matchMedia('(max-width: 980px) and (orientation: landscape)').matches;
+  if (touchDevice) touchControlsEl.classList.remove('hidden');
+  else touchControlsEl.classList.add('hidden');
 }
 
 function updateBuildInfo() {
@@ -1171,16 +1185,22 @@ function salvageMultiplier() {
   if (metaNodeLevel('economy', 'economyKeystone') > 0) mult += 0.15;
   return mult;
 }
+function progressionTierByWave(wave = state.wave) {
+  if (wave <= PROGRESSION_TIER_ONE_MAX) return '1-1000';
+  return '1001-2000+';
+}
 function waveScale(wave = state.wave) {
   const w = Math.max(1, wave);
+  // Slow scaling curve to keep longer runs playable.
+  const effectiveWave = 1 + Math.pow(w - 1, 0.93);
   return {
-    hp: 1 + (w - 1) * ENDLESS_SCALING.hpPerWave,
-    speed: 1 + (w - 1) * (ENDLESS_SCALING.speedPerWave + SPEED_SCALING_PER_WAVE),
-    projectile: 1 + (w - 1) * ENDLESS_SCALING.projectileSpeedPerWave,
-    fireRate: 1 + (w - 1) * (ENDLESS_SCALING.fireRatePerWave + AGGRESSION_SCALING_PER_WAVE * 0.45),
-    count: 1 + (w - 1) * ENDLESS_SCALING.countPerWave,
-    aggression: 1 + (w - 1) * AGGRESSION_SCALING_PER_WAVE,
-    eliteChance: clamp(ENDLESS_SCALING.eliteBaseChance + (w - 1) * (ENDLESS_SCALING.eliteChancePerWave + ELITE_CHANCE_PER_WAVE), 0, 0.45),
+    hp: 1 + (effectiveWave - 1) * ENDLESS_SCALING.hpPerWave,
+    speed: 1 + (effectiveWave - 1) * (ENDLESS_SCALING.speedPerWave + SPEED_SCALING_PER_WAVE),
+    projectile: 1 + (effectiveWave - 1) * ENDLESS_SCALING.projectileSpeedPerWave,
+    fireRate: 1 + (effectiveWave - 1) * (ENDLESS_SCALING.fireRatePerWave + AGGRESSION_SCALING_PER_WAVE * 0.45),
+    count: 1 + (effectiveWave - 1) * ENDLESS_SCALING.countPerWave,
+    aggression: 1 + (effectiveWave - 1) * AGGRESSION_SCALING_PER_WAVE,
+    eliteChance: clamp(ENDLESS_SCALING.eliteBaseChance + (effectiveWave - 1) * (ENDLESS_SCALING.eliteChancePerWave + ELITE_CHANCE_PER_WAVE), 0, 0.45),
   };
 }
 function weaponDamageMultiplier() {
@@ -2667,6 +2687,14 @@ function finishWave() {
   state.credits += total;
   state.totalCreditsEarned += total;
   state.score += Math.round((waveBonus + fastBonus + noDamageBonus) * scoreMultiplier() * 0.4);
+
+  if (state.wave % MILESTONE_WAVE_INTERVAL === 0) {
+    const tierBonus = progressionTierByWave(state.wave) === '1001-2000+' ? 2 : 0;
+    const milestoneGems = MILESTONE_GEM_BASE + Math.floor(state.wave / 100) * MILESTONE_GEM_PER_100_WAVES + tierBonus;
+    state.profile.gems += milestoneGems;
+    addPickupLabel(`Milestone +${milestoneGems} Gems`, state.player.x, state.player.y - 34, '#c2ff88', 'rare');
+    saveActiveSlot();
+  }
   audio.play('wave_clear');
 
   enterShop({ waveBonus, fastBonus, noDamageBonus });
@@ -2796,7 +2824,7 @@ function renderUpgradeList() {
 
 function updateHud() {
   scoreEl.textContent = String(Math.floor(state.score));
-  waveEl.textContent = String(state.wave);
+  waveEl.textContent = `${state.wave} (${progressionTierByWave(state.wave)})`;
   livesEl.textContent = String(state.player ? state.player.lives : SETTINGS.startLives);
   healthEl.textContent = String(state.player ? Math.max(0, Math.round(state.player.health)) : SETTINGS.baseMaxHealth);
   shieldEl.textContent = String(state.player ? Math.round(state.player.shield) : 0);
@@ -2918,6 +2946,37 @@ window.addEventListener('mouseup', (event) => {
   if (event.button === 2) state.mouse.rightDown = false;
 });
 
+function bindTouchButton(button, key) {
+  if (!button) return;
+  const press = (event) => {
+    event.preventDefault();
+    state.keys[key] = true;
+    if (key === ' ') {
+      state.mouse.leftDown = true;
+      if (state.gameState === GAME_STATE.PLAYING) shootPlayer();
+    }
+  };
+  const release = (event) => {
+    event.preventDefault();
+    state.keys[key] = false;
+    if (key === ' ') state.mouse.leftDown = false;
+  };
+  button.addEventListener('touchstart', press, { passive: false });
+  button.addEventListener('touchend', release, { passive: false });
+  button.addEventListener('touchcancel', release, { passive: false });
+  button.addEventListener('pointerdown', press);
+  button.addEventListener('pointerup', release);
+  button.addEventListener('pointerleave', release);
+}
+
+if (touchControlsEl) {
+  touchControlsEl.querySelectorAll('.touch-btn[data-key]').forEach((btn) => {
+    bindTouchButton(btn, btn.dataset.key);
+  });
+}
+
+window.addEventListener('resize', updateTouchControlsVisibility);
+
 gameWrap.addEventListener('contextmenu', (event) => event.preventDefault());
 nextWaveButton.addEventListener('click', () => {
   audio.play('ui_click');
@@ -2969,6 +3028,32 @@ function drawBackground(now) {
   vignette.addColorStop(1, 'rgba(0,0,0,0.45)');
   ctx.fillStyle = vignette;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Geometric neon lattice (purple + green) for stronger visual identity.
+  ctx.save();
+  const alpha = 0.18 + 0.07 * Math.sin(now * 0.0008);
+  ctx.globalAlpha = alpha;
+  neonStroke('rgba(180,90,255,0.9)', 1.2, 12);
+  const size = 84;
+  for (let y = -size; y < canvas.height + size; y += size) {
+    for (let x = -size; x < canvas.width + size; x += size) {
+      const off = Math.sin((x + y) * 0.01 + now * 0.001) * 8;
+      ctx.beginPath();
+      ctx.moveTo(x + off, y);
+      ctx.lineTo(x + size * 0.5, y + size + off);
+      ctx.lineTo(x - size * 0.5, y + size + off);
+      ctx.closePath();
+      ctx.stroke();
+    }
+  }
+  neonStroke('rgba(110,255,160,0.85)', 1, 10);
+  for (let y = 0; y < canvas.height; y += 120) {
+    ctx.beginPath();
+    ctx.moveTo(0, y + Math.sin(now * 0.001 + y * 0.02) * 12);
+    ctx.lineTo(canvas.width, y + Math.cos(now * 0.001 + y * 0.02) * 12);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawRift(now) {
@@ -3374,7 +3459,9 @@ function drawFx() {
     ctx.fillStyle = p.color;
     ctx.shadowColor = p.color;
     ctx.shadowBlur = p.glow * glowScale();
-    ctx.fillRect(p.x, p.y, p.size, p.size);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   ctx.globalAlpha = 1;
