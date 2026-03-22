@@ -205,6 +205,8 @@ const PLAYER_BOUNDARY_PADDING = 12;
 const ENEMY_BOUNDARY_PADDING = 8;
 const PROJECTILE_DESPAWN_MARGIN = 40;
 const WEAPON_VISUAL_SCALE = 1;
+const DRONE_ORBIT_RADIUS = 52;
+const DRONE_ORBIT_SPEED = 0.0019;
 
 const WEAPON_BALANCE_VALUES = {
   blaster: { damage: 1.2, fireDelayMs: 200, speed: 9.4, spread: 0, pierce: 0, splash: 0 },
@@ -1388,6 +1390,7 @@ function unlockDrone(type) {
   state.drones.push({
     type,
     orbitAngle: baseAngle,
+    orbitRadius: DRONE_ORBIT_RADIUS,
     cooldown: 0,
     targetRef: null,
     retargetAt: 0,
@@ -1500,14 +1503,23 @@ function updateDrones(dtMs, now) {
   const cooldownMult = Math.max(0.45, 1 - state.upgrades.droneCooldown * 0.04 - metaNodeLevel('drones', 'droneRelay') * 0.07);
   state.beamEffects = [];
   state.arcEffects = [];
+  const droneCount = Math.max(1, state.drones.length);
+  const spacing = (Math.PI * 2) / droneCount;
 
   state.drones.forEach((drone, index) => {
-    // Orbit position around player
-    const orbitSpeed = 0.0016 + index * 0.0002;
-    drone.orbitAngle += dtMs * orbitSpeed;
-    const radius = SETTINGS.droneOrbitBaseRadius + index * SETTINGS.droneOrbitStep;
-    drone.x = p.x + Math.cos(drone.orbitAngle) * radius;
-    drone.y = p.y + Math.sin(drone.orbitAngle) * radius;
+    // Clockwise orbit with smooth spacing and per-role ring bias.
+    const roleRadiusBias = drone.type === 'bomber' ? 20 : drone.type === 'laser' ? 8 : -6;
+    const targetRadius = DRONE_ORBIT_RADIUS + roleRadiusBias + index * (SETTINGS.droneOrbitStep * 0.5);
+    drone.orbitRadius += (targetRadius - (drone.orbitRadius || DRONE_ORBIT_RADIUS)) * Math.min(1, dtMs * 0.008);
+
+    const roleSpeedMult = drone.type === 'electricity' ? 1.16 : drone.type === 'bomber' ? 0.9 : 1;
+    const clockwiseSpeed = DRONE_ORBIT_SPEED * roleSpeedMult;
+    const targetAngle = -now * clockwiseSpeed + index * spacing; // negative angle => clockwise
+    const angleDelta = normalizeAngle(targetAngle - drone.orbitAngle);
+    drone.orbitAngle += angleDelta * Math.min(1, dtMs * 0.008);
+
+    drone.x = p.x + Math.cos(drone.orbitAngle) * drone.orbitRadius;
+    drone.y = p.y + Math.sin(drone.orbitAngle) * drone.orbitRadius;
 
     if (drone.cooldown > 0) drone.cooldown -= dtMs;
 
