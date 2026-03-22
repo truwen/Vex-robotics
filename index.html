@@ -76,6 +76,49 @@
       </div>
     </section>
 
+    <section id="skillTreeOverlay" class="skilltree-overlay hidden" aria-live="polite">
+      <div class="skilltree-shell">
+        <header class="skilltree-topbar">
+          <div class="skilltree-title-wrap">
+            <h2>META SKILL TREE</h2>
+            <p id="skillTreeTopMeta">Slot 1 • Gems 0</p>
+          </div>
+          <div class="skilltree-top-actions">
+            <span id="skillTreeBuildInfo" class="skilltree-build">v0.00 | 00:00:00</span>
+            <button id="skillTreeBackBtn" class="menu-btn">Back</button>
+          </div>
+        </header>
+
+        <div class="skilltree-body">
+          <aside class="skilltree-sidebar">
+            <h3>Categories</h3>
+            <div id="skillTreeCategoryButtons" class="skilltree-cat-list"></div>
+            <div id="skillTreeWeaponSubButtons" class="skilltree-sub-list"></div>
+          </aside>
+
+          <main class="skilltree-main">
+            <div id="skillTreeViewport" class="skilltree-viewport">
+              <canvas id="skillTreeCanvas" width="1200" height="640" aria-label="Skill tree canvas"></canvas>
+            </div>
+          </main>
+
+          <aside class="skilltree-info">
+            <h3 id="skillTreeNodeName">Select a node</h3>
+            <p><strong>Cost:</strong> <span id="skillTreeNodeCost">-</span></p>
+            <p id="skillTreeNodeDesc">Pick a node to view details.</p>
+            <p><strong>Prerequisites:</strong> <span id="skillTreeNodeReq">-</span></p>
+            <button id="skillTreeBuyBtn" class="menu-btn" disabled>Purchase</button>
+            <p id="skillTreeRespecHint" class="subtle">Respec: not yet implemented (future option).</p>
+          </aside>
+        </div>
+
+        <footer class="skilltree-bottombar">
+          <span>Drag to pan • Wheel to zoom-ish scroll • Click node to inspect • Touch drag supported</span>
+          <span id="skillTreeSaveStatus">Autosaves on purchase.</span>
+        </footer>
+      </div>
+    </section>
+
     <div id="buildInfo" class="build-info" aria-live="polite"></div>
     <section id="pickupLabels" class="pickup-labels" aria-live="polite"></section>
 
