@@ -41,6 +41,20 @@ Weapon slots:
 
 Some weapons start locked and can unlock through rare drops.
 
+Weapon balance model (v0.11+)
+-----------------------------
+- Goal: no single dominant weapon; each has a clear combat role.
+- Roles:
+  - Rapid = single-target pressure
+  - Spread = close-range swarm clear
+  - Laser = tank killer / pierce line
+  - Arc = group control (splash clusters)
+  - Blaster = balanced fallback
+- Balance mechanics now include:
+  - distance-based damage falloff per weapon
+  - diminishing returns for sustained same-target rapid/laser pressure
+  - situational bonuses/penalties based on enemy density, target durability, and range
+
 Pickups / drops
 ---------------
 Money orbs:
