@@ -244,6 +244,11 @@ const AGGRESSION_SCALING_PER_WAVE = 0.015;
 const SPEED_SCALING_PER_WAVE = 0.012;
 const ELITE_CHANCE_PER_WAVE = 0.005;
 const MIXED_WAVE_COMPLEXITY_SCALING = 0.11;
+const ENEMY_PURSUIT_LEAD_BASE_MS = 180;
+const ENEMY_PURSUIT_LEAD_DIST_FACTOR = 0.12;
+const LATE_GAME_AGGRESSION_START_WAVE = 8;
+const LATE_GAME_AGGRESSION_PER_WAVE = 0.03;
+const LATE_GAME_AGGRESSION_CAP = 0.85;
 
 // Mouse-aim tuning (kept outside SETTINGS for easy visibility while tuning controls)
 const MOUSE_AIM_DEADZONE = 52; // px radius around ship where aim will not update
@@ -2232,11 +2237,25 @@ function enemySeparation(idx) {
     nearCount += 1;
     if (nearCount >= 8) break; // cheap cap for large waves
   }
-  return { fx, fy };
+  return { fx, fy, nearCount };
+}
+
+function pursuitVector(enemy, dist, leadMs = ENEMY_PURSUIT_LEAD_BASE_MS) {
+  const lead = Math.min(480, leadMs + dist * ENEMY_PURSUIT_LEAD_DIST_FACTOR);
+  const tx = state.player.x + state.player.vx * (lead / 16);
+  const ty = state.player.y + state.player.vy * (lead / 16);
+  const dx = tx - enemy.x;
+  const dy = ty - enemy.y;
+  const mag = Math.hypot(dx, dy) || 1;
+  return { nx: dx / mag, ny: dy / mag };
 }
 
 function updateEnemies(now) {
   const scale = waveScale();
+  const lateAggression = 1 + Math.min(
+    LATE_GAME_AGGRESSION_CAP,
+    Math.max(0, state.wave - LATE_GAME_AGGRESSION_START_WAVE) * LATE_GAME_AGGRESSION_PER_WAVE,
+  );
   for (let idx = 0; idx < state.enemies.length; idx++) {
     const e = state.enemies[idx];
     const dx = state.player.x - e.x;
@@ -2246,12 +2265,14 @@ function updateEnemies(now) {
     const ny = dy / dist;
     const edge = enemyEdgeAvoidance(e);
     const sep = enemySeparation(idx);
-    const aggression = scale.aggression * (e.elite ? 1.12 : 1);
+    const pursuit = pursuitVector(e, dist);
+    const crowding = Math.min(1, sep.nearCount / 6);
+    const aggression = scale.aggression * lateAggression * (e.elite ? 1.12 : 1);
 
     if (e.typeId === 'driftRock' || e.typeId === 'splitterCore') {
-      // Previously these could drift into passive edge loops. Add active steering.
-      e.vx += nx * 0.02 * aggression + edge.fx + sep.fx;
-      e.vy += ny * 0.02 * aggression + edge.fy + sep.fy;
+      // Drifters now bias predictive pursuit and stronger anti-cluster repel.
+      e.vx += pursuit.nx * 0.024 * aggression + edge.fx * (1 + crowding * 0.35) + sep.fx * (1.3 + crowding * 0.7);
+      e.vy += pursuit.ny * 0.024 * aggression + edge.fy * (1 + crowding * 0.35) + sep.fy * (1.3 + crowding * 0.7);
       const maxDriftSpeed = ENEMY_TYPES[e.typeId].speed * 1.4 * scale.speed;
       const vMag = Math.hypot(e.vx, e.vy) || 1;
       if (vMag > maxDriftSpeed) {
@@ -2266,9 +2287,9 @@ function updateEnemies(now) {
     }
 
     if (e.typeId === 'dartScout') {
-      const sp = ENEMY_TYPES.dartScout.speed * scale.speed * (e.elite ? 1.12 : 1);
-      e.vx = nx * sp + edge.fx * 1.2 + sep.fx * 1.35;
-      e.vy = ny * sp + edge.fy * 1.2 + sep.fy * 1.35;
+      const sp = ENEMY_TYPES.dartScout.speed * scale.speed * aggression * 1.02 * (e.elite ? 1.12 : 1);
+      e.vx = pursuit.nx * sp + edge.fx * (1.25 + crowding * 0.2) + sep.fx * (1.55 + crowding * 0.6);
+      e.vy = pursuit.ny * sp + edge.fy * (1.25 + crowding * 0.2) + sep.fy * (1.55 + crowding * 0.6);
       e.x += e.vx;
       e.y += e.vy;
       clampToArena(e, ENEMY_BOUNDARY_PADDING, 0.25);
@@ -2281,8 +2302,8 @@ function updateEnemies(now) {
       if (burst) e.burstAt = now + rand(2400, 4300);
       const burstMult = burst ? 1.85 : 1;
       const sp = ENEMY_TYPES.bulwark.speed * scale.speed * aggression * 0.9 * (e.elite ? 1.08 : 1) * burstMult;
-      e.vx = nx * sp + edge.fx * 2.1 + sep.fx * 0.55;
-      e.vy = ny * sp + edge.fy * 2.1 + sep.fy * 0.55;
+      e.vx = pursuit.nx * sp + edge.fx * (2.1 + crowding * 0.4) + sep.fx * (0.75 + crowding * 0.35);
+      e.vy = pursuit.ny * sp + edge.fy * (2.1 + crowding * 0.4) + sep.fy * (0.75 + crowding * 0.35);
       e.x += e.vx;
       e.y += e.vy;
       clampToArena(e, ENEMY_BOUNDARY_PADDING, 0.25);
@@ -2291,18 +2312,18 @@ function updateEnemies(now) {
 
     if (e.typeId === 'pulseTurret') {
       const desired = 250;
-      const sp = ENEMY_TYPES.pulseTurret.speed * scale.speed * 0.72 * (e.elite ? 1.1 : 1);
+      const sp = ENEMY_TYPES.pulseTurret.speed * scale.speed * (0.72 + Math.min(0.24, (state.wave - 1) * 0.01)) * (e.elite ? 1.1 : 1);
       if (dist > desired) {
-        e.vx = nx * sp;
-        e.vy = ny * sp;
+        e.vx = pursuit.nx * sp;
+        e.vy = pursuit.ny * sp;
       } else {
         // Late waves: flank harder around the player to punish center camping.
-        const flank = 0.75 + Math.min(0.55, (state.wave - 1) * 0.014);
+        const flank = 0.75 + Math.min(0.75, (state.wave - 1) * 0.016);
         e.vx = -ny * sp * flank;
         e.vy = nx * sp * flank;
       }
-      e.vx += edge.fx * 1.45 + sep.fx;
-      e.vy += edge.fy * 1.45 + sep.fy;
+      e.vx += edge.fx * (1.45 + crowding * 0.2) + sep.fx * (1 + crowding * 0.45);
+      e.vy += edge.fy * (1.45 + crowding * 0.2) + sep.fy * (1 + crowding * 0.45);
       e.x += e.vx;
       e.y += e.vy;
       clampToArena(e, ENEMY_BOUNDARY_PADDING, 0.2);
