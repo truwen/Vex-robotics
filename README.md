@@ -1,7 +1,7 @@
 Neon Rift Arena (Offline, Vanilla HTML/CSS/JS)
 ===============================================
 
-Version: v0.12
+Version: v0.13
 
 Deeper progression build of Neon Rift Arena.
 Run by opening `index.html` directly (no server, no npm, no framework).
