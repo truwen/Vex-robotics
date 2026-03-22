@@ -1,7 +1,7 @@
 Neon Rift Arena (Offline, Vanilla HTML/CSS/JS)
 ===============================================
 
-Version: v0.7
+Version: v0.11
 
 Deeper progression build of Neon Rift Arena.
 Run by opening `index.html` directly (no server, no npm, no framework).
@@ -88,6 +88,42 @@ High scores saved:
 - highest wave
 - best credits earned in one run
 - best kills in one run
+
+Meta skill tree structure (gems only)
+-------------------------------------
+- Gems are spent **only** in the persistent Meta Skill Tree (never in-run shop).
+- Tree categories:
+  - Weapons (includes per-weapon nodes)
+  - Drones
+  - Defense
+  - Offense
+  - Economy
+- Node sizes:
+  - Small: lower cost, higher max levels
+  - Medium: moderate cost, moderate max levels
+  - Keystone: high-cost, single-rank capstone
+
+Current node model in `script.js`:
+- Weapons:
+  - Small: Blaster/Rapid/Spread/Laser/Arc damage nodes
+  - Medium: Weapon Core (+all weapon damage)
+  - Keystone: Calibrated Arsenal (+global fire-rate)
+- Drones:
+  - Small: Drone damage
+  - Medium: Drone fire-rate
+  - Keystone: +1 max drone
+- Defense:
+  - Small: max health
+  - Medium: max shield
+  - Keystone: +1 starting life
+- Offense:
+  - Small: all-damage scaling
+  - Medium: crit chance
+  - Keystone: Glass Cannon (+damage, -max health)
+- Economy:
+  - Small: credits scaling
+  - Medium: extra gems at run end
+  - Keystone: credits + score multiplier
 
 Main tweakable constants
 ------------------------
