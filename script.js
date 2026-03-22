@@ -59,7 +59,7 @@ const GAME_STATE = {
   GAME_OVER: 'game_over',
 };
 
-const GAME_VERSION = 'v0.8';
+const GAME_VERSION = 'v0.10';
 const BUILD_TIME = new Date().toLocaleTimeString();
 
 const SETTINGS = {
@@ -245,6 +245,11 @@ const DEFAULT_PLAYER_SETTINGS = {
 
 const SETTINGS_STORAGE_KEY = 'neon_rift_arena_settings_v1';
 const HIGH_SCORE_STORAGE_KEY = 'neon_rift_arena_high_scores_v1';
+const SAVE_SLOT_KEYS = [
+  'neon_rift_save_slot_1',
+  'neon_rift_save_slot_2',
+  'neon_rift_save_slot_3',
+];
 
 const WEAPON_SLOTS = ['blaster', 'rapid', 'spread', 'laser', 'arc'];
 const WEAPON_DEFS = {
@@ -344,12 +349,12 @@ const UPGRADE_DEFS = [
   },
 
   // One-time unlocks
-  { id: 'weaponSpreadUnlock', name: 'Unlock: Spread Blaster', key: '4', category: 'unlock', maxLevel: 1, baseCost: 170, costScale: 1, desc: 'Unlock weapon slot 3', minWave: 2, apply: () => { state.weaponUnlocks.spread = true; } },
-  { id: 'weaponLaserUnlock', name: 'Unlock: Laser Beam', key: '', category: 'unlock', maxLevel: 1, baseCost: 260, costScale: 1, desc: 'Unlock weapon slot 4', minWave: 4, apply: () => { state.weaponUnlocks.laser = true; } },
-  { id: 'weaponArcUnlock', name: 'Unlock: Arc Cannon', key: '', category: 'unlock', maxLevel: 1, baseCost: 300, costScale: 1, desc: 'Unlock weapon slot 5', minWave: 5, apply: () => { state.weaponUnlocks.arc = true; } },
-  { id: 'droneBomber', name: 'Unlock: Bomber Drone', key: '', category: 'unlock', maxLevel: 1, baseCost: 320, costScale: 1, desc: 'AOE bombs for crowds', minWave: 3, apply: () => unlockDrone('bomber') },
-  { id: 'droneElectricity', name: 'Unlock: Electricity Drone', key: '', category: 'unlock', maxLevel: 1, baseCost: 340, costScale: 1, desc: 'Arc chains nearby enemies', minWave: 4, apply: () => unlockDrone('electricity') },
-  { id: 'droneLaser', name: 'Unlock: Laser Drone', key: '', category: 'unlock', maxLevel: 1, baseCost: 360, costScale: 1, desc: 'Sustained beam vs tanks', minWave: 5, apply: () => unlockDrone('laser') },
+  { id: 'weaponSpreadUnlock', name: 'Unlock: Spread Blaster', key: '4', category: 'unlock', maxLevel: 1, baseCost: 170, costScale: 1, desc: 'Unlock weapon slot 3', minWave: 2, apply: () => { state.weaponUnlocks.spread = true; state.profile.unlocks.spread = true; saveActiveSlot(); } },
+  { id: 'weaponLaserUnlock', name: 'Unlock: Laser Beam', key: '', category: 'unlock', maxLevel: 1, baseCost: 260, costScale: 1, desc: 'Unlock weapon slot 4', minWave: 4, apply: () => { state.weaponUnlocks.laser = true; state.profile.unlocks.laser = true; saveActiveSlot(); } },
+  { id: 'weaponArcUnlock', name: 'Unlock: Arc Cannon', key: '', category: 'unlock', maxLevel: 1, baseCost: 300, costScale: 1, desc: 'Unlock weapon slot 5', minWave: 5, apply: () => { state.weaponUnlocks.arc = true; state.profile.unlocks.arc = true; saveActiveSlot(); } },
+  { id: 'droneBomber', name: 'Unlock: Bomber Drone', key: '', category: 'unlock', maxLevel: 1, baseCost: 320, costScale: 1, desc: 'AOE bombs for crowds', minWave: 3, apply: () => { unlockDrone('bomber'); state.profile.unlocks.bomber = true; saveActiveSlot(); } },
+  { id: 'droneElectricity', name: 'Unlock: Electricity Drone', key: '', category: 'unlock', maxLevel: 1, baseCost: 340, costScale: 1, desc: 'Arc chains nearby enemies', minWave: 4, apply: () => { unlockDrone('electricity'); state.profile.unlocks.electricity = true; saveActiveSlot(); } },
+  { id: 'droneLaser', name: 'Unlock: Laser Drone', key: '', category: 'unlock', maxLevel: 1, baseCost: 360, costScale: 1, desc: 'Sustained beam vs tanks', minWave: 5, apply: () => { unlockDrone('laser'); state.profile.unlocks.laserDrone = true; saveActiveSlot(); } },
 
   // Capped core upgrades
   { id: 'rapidFire', name: 'Rapid Fire', key: '1', category: 'capped', maxLevel: 6, baseCost: 70, costScale: 1.44, desc: 'Decrease fire delay', apply: () => { state.upgrades.rapidFire += 1; } },
@@ -770,6 +775,23 @@ const state = {
     critUntil: 0,
     dronePowerUntil: 0,
   },
+  activeSaveSlot: 1,
+  profile: {
+    gems: 0,
+    skillTree: {
+      economy: 0,
+      survival: 0,
+      weaponMastery: 0,
+    },
+    unlocks: {
+      spread: false,
+      laser: false,
+      arc: false,
+      bomber: false,
+      electricity: false,
+      laserDrone: false,
+    },
+  },
 };
 
 canvas.width = SETTINGS.canvasWidth;
@@ -923,6 +945,57 @@ function saveHighScores() {
   }
 }
 
+function emptyProfile() {
+  return {
+    gems: 0,
+    skillTree: { economy: 0, survival: 0, weaponMastery: 0 },
+    unlocks: { spread: false, laser: false, arc: false, bomber: false, electricity: false, laserDrone: false },
+  };
+}
+
+function loadSaveSlot(slotIndex) {
+  const idx = clamp(slotIndex, 1, 3);
+  const key = SAVE_SLOT_KEYS[idx - 1];
+  state.activeSaveSlot = idx;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) {
+      state.profile = emptyProfile();
+      return false;
+    }
+    const parsed = JSON.parse(raw);
+    state.profile = {
+      ...emptyProfile(),
+      ...parsed,
+      skillTree: { ...emptyProfile().skillTree, ...(parsed.skillTree || {}) },
+      unlocks: { ...emptyProfile().unlocks, ...(parsed.unlocks || {}) },
+    };
+    return true;
+  } catch (_err) {
+    state.profile = emptyProfile();
+    return false;
+  }
+}
+
+function saveActiveSlot() {
+  const key = SAVE_SLOT_KEYS[state.activeSaveSlot - 1];
+  try {
+    localStorage.setItem(key, JSON.stringify(state.profile));
+  } catch (_err) {
+    // ignore storage failures
+  }
+}
+
+function deleteSaveSlot(slotIndex) {
+  const idx = clamp(slotIndex, 1, 3);
+  try {
+    localStorage.removeItem(SAVE_SLOT_KEYS[idx - 1]);
+  } catch (_err) {
+    // ignore
+  }
+  if (state.activeSaveSlot === idx) state.profile = emptyProfile();
+}
+
 function applySettingsToUI() {
   // HUD scaling is done via CSS transform so beginners can quickly tweak.
   const scale = clamp(Number(state.settings.hudScale) || 1, 0.8, 1.4);
@@ -998,7 +1071,7 @@ function pickupPullStrength() {
   return PICKUP_SETTINGS.moneyAttractionBase + state.upgrades.magnetField * PICKUP_SETTINGS.moneyAttractionPerTier;
 }
 function salvageMultiplier() {
-  return 1 + state.upgrades.salvageBonus * 0.18 + state.upgrades.deepCoreSalvage * 0.08;
+  return 1 + state.upgrades.salvageBonus * 0.18 + state.upgrades.deepCoreSalvage * 0.08 + state.profile.skillTree.economy * 0.05;
 }
 function waveScale(wave = state.wave) {
   const w = Math.max(1, wave);
@@ -1016,6 +1089,7 @@ function weaponDamageMultiplier() {
   return 1
     + state.upgrades.overchargedRounds * 0.16
     + state.upgrades.weaponTuning * 0.08
+    + state.profile.skillTree.weaponMastery * 0.05
     + state.runBonuses.damageMultiplier
     + state.runBonuses.permanentWeaponBonus;
 }
@@ -1049,8 +1123,8 @@ function createPlayer() {
     angle: -Math.PI / 2,
     radius: 14,
 
-    maxHealth: SETTINGS.baseMaxHealth,
-    health: SETTINGS.baseMaxHealth,
+    maxHealth: SETTINGS.baseMaxHealth + state.profile.skillTree.survival * 10,
+    health: SETTINGS.baseMaxHealth + state.profile.skillTree.survival * 10,
     maxShield: SETTINGS.baseMaxShield,
     shield: SETTINGS.baseMaxShield,
     shieldRegen: SETTINGS.shieldRegenPerSecond,
@@ -1421,9 +1495,9 @@ function resetRun() {
   state.weaponUnlocks = {
     blaster: true,
     rapid: true,
-    spread: false,
-    laser: false,
-    arc: false,
+    spread: state.profile.unlocks.spread,
+    laser: state.profile.unlocks.laser,
+    arc: state.profile.unlocks.arc,
   };
   state.runBonuses = {
     damageMultiplier: 0,
@@ -1459,6 +1533,9 @@ function pauseRun() {
 }
 
 function endRun() {
+  const earnedGems = Math.max(0, Math.floor(state.totalCreditsEarned / 25));
+  state.profile.gems += earnedGems;
+  saveActiveSlot();
   state.highScores.bestScore = Math.max(state.highScores.bestScore, Math.floor(state.score));
   state.highScores.highestWave = Math.max(state.highScores.highestWave, state.wave);
   state.highScores.bestCredits = Math.max(state.highScores.bestCredits, Math.floor(state.totalCreditsEarned));
@@ -1554,10 +1631,83 @@ function showMainMenu() {
 Best Score: ${state.highScores.bestScore} | Best Wave: ${state.highScores.highestWave} | Best Credits: ${state.highScores.bestCredits} | Best Kills: ${state.highScores.totalKillsBestRun}`,
     [
       { label: 'Start Game', onClick: startRun },
+      { label: `Save Slots (Active: ${state.activeSaveSlot})`, onClick: showSaveSlotsMenu },
+      { label: `Meta Skills (Gems: ${state.profile.gems})`, onClick: showSkillTreeMenu },
       { label: 'Settings', onClick: showSettingsMenu },
       { label: 'How To Play', onClick: showHowToPlay },
     ],
   );
+}
+
+function showSaveSlotsMenu() {
+  state.gameState = GAME_STATE.HOW_TO_PLAY;
+  const buttons = [];
+
+  for (let slot = 1; slot <= 3; slot++) {
+    let info = 'Empty';
+    try {
+      const raw = localStorage.getItem(SAVE_SLOT_KEYS[slot - 1]);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        info = `Gems ${parsed.gems || 0}`;
+      }
+    } catch (_err) { /* ignore */ }
+
+    buttons.push({
+      label: `Load Slot ${slot} (${info})`,
+      onClick: () => {
+        loadSaveSlot(slot);
+        showMainMenu();
+      },
+    });
+    buttons.push({
+      label: `New Game Slot ${slot}`,
+      onClick: () => {
+        state.activeSaveSlot = slot;
+        state.profile = emptyProfile();
+        saveActiveSlot();
+        startRun();
+      },
+    });
+    buttons.push({
+      label: `Delete Slot ${slot}`,
+      onClick: () => {
+        deleteSaveSlot(slot);
+        showSaveSlotsMenu();
+      },
+    });
+  }
+
+  buttons.push({ label: 'Back to Main Menu', onClick: showMainMenu });
+  setMenu('SAVE SLOTS', 'Load, start new, or delete any slot. Progress autosaves.', buttons);
+}
+
+function showSkillTreeMenu() {
+  state.gameState = GAME_STATE.HOW_TO_PLAY;
+  const skills = [
+    { id: 'economy', label: 'Economy Uplink', desc: '+5% credits and orb value', cost: (lvl) => 20 + lvl * 15 },
+    { id: 'survival', label: 'Hull Matrix', desc: '+10 max health per tier', cost: (lvl) => 25 + lvl * 20 },
+    { id: 'weaponMastery', label: 'Weapon Mastery', desc: '+5% weapon damage per tier', cost: (lvl) => 25 + lvl * 20 },
+  ];
+
+  const buttons = skills.map((s) => {
+    const lvl = state.profile.skillTree[s.id];
+    const cost = s.cost(lvl);
+    return {
+      label: `${s.label} Lv${lvl} (Cost ${cost}) — ${s.desc}`,
+      onClick: () => {
+        if (state.profile.gems < cost) return;
+        state.profile.gems -= cost;
+        state.profile.skillTree[s.id] += 1;
+        saveActiveSlot();
+        showSkillTreeMenu();
+      },
+    };
+  });
+
+  buttons.push({ label: `Active Slot: ${state.activeSaveSlot}`, onClick: () => {} });
+  buttons.push({ label: 'Back to Main Menu', onClick: showMainMenu });
+  setMenu('META SKILL TREE', `Spend Gems on permanent upgrades. Gems: ${state.profile.gems}`, buttons);
 }
 
 function showHowToPlay() {
@@ -3155,6 +3305,7 @@ function frame(now) {
 // Init
 // -------------------------------------------------
 function init() {
+  loadSaveSlot(1);
   loadSettings();
   loadHighScores();
   applySettingsToUI();
