@@ -214,6 +214,16 @@ const WEAPON_BALANCE_VALUES = {
   arc: { damage: 1.45, fireDelayMs: 305, speed: 8.6, spread: 0, pierce: 0, splash: 94 },
 };
 
+// Role tuning for weapon identity + anti-dominance balancing.
+// Includes falloff, diminishing-return clamps, and situational strengths.
+const WEAPON_ROLE_TUNING = {
+  blaster: { falloffStart: 280, falloffEnd: 760, minFalloffMult: 0.86 },
+  rapid: { falloffStart: 220, falloffEnd: 560, minFalloffMult: 0.72, diminishingPerStreak: 0.055, diminishingFloor: 0.68 },
+  spread: { falloffStart: 170, falloffEnd: 420, minFalloffMult: 0.54 },
+  laser: { falloffStart: 320, falloffEnd: 880, minFalloffMult: 0.8, pierceDiminish: 0.08, pierceFloor: 0.66 },
+  arc: { falloffStart: 240, falloffEnd: 620, minFalloffMult: 0.78 },
+};
+
 const PLAYER_RING_OUTER_RADIUS = 25;
 const PLAYER_RING_INNER_RADIUS = 20;
 const PLAYER_RING_WIDTH = 3;
@@ -1265,6 +1275,8 @@ function createPlayerBullet(offsetAngle = 0, weaponId = activeWeaponId()) {
   return {
     x: state.player.x + Math.cos(ang) * state.player.radius,
     y: state.player.y + Math.sin(ang) * state.player.radius,
+    spawnX: state.player.x + Math.cos(ang) * state.player.radius,
+    spawnY: state.player.y + Math.sin(ang) * state.player.radius,
     vx: Math.cos(ang) * weaponProjectileSpeed() + state.player.vx * 0.15,
     vy: Math.sin(ang) * weaponProjectileSpeed() + state.player.vy * 0.15,
     radius: weaponId === 'laser' ? 2 : 2.8,
@@ -1272,6 +1284,7 @@ function createPlayerBullet(offsetAngle = 0, weaponId = activeWeaponId()) {
     damage: baseDamage,
     trail: [],
     weaponId,
+    hitCount: 0,
     pierce: weapon.pierce || 0,
     splashRadius: weapon.splashRadius || 0,
   };
@@ -1414,6 +1427,68 @@ function applyDamageToEnemyRef(enemyRef, dmg) {
   if (enemy.hp <= 0) {
     killEnemy(idx, enemy);
   }
+}
+
+function enemyCountNear(enemy, radius) {
+  let count = 0;
+  for (const other of state.enemies) {
+    if (other === enemy) continue;
+    if (distance(enemy, other) <= radius) count += 1;
+  }
+  return count;
+}
+
+function weaponFalloffMultiplier(bullet) {
+  const tune = WEAPON_ROLE_TUNING[bullet.weaponId] || WEAPON_ROLE_TUNING.blaster;
+  const traveled = Math.hypot((bullet.x - bullet.spawnX), (bullet.y - bullet.spawnY));
+  if (traveled <= tune.falloffStart) return 1;
+  if (traveled >= tune.falloffEnd) return tune.minFalloffMult;
+  const t = (traveled - tune.falloffStart) / Math.max(1, tune.falloffEnd - tune.falloffStart);
+  return 1 - (1 - tune.minFalloffMult) * t;
+}
+
+function situationalWeaponMultiplier(bullet, enemy, now, isSplash = false) {
+  const weaponId = bullet.weaponId;
+  const nearby = enemyCountNear(enemy, 120);
+  let mult = 1;
+
+  if (weaponId === 'rapid') {
+    mult += nearby <= 1 ? 0.18 : -0.08;
+    const recentGap = now - (enemy.lastRapidHitAt || 0);
+    enemy.rapidHitStreak = recentGap < 220 ? (enemy.rapidHitStreak || 0) + 1 : 1;
+    enemy.lastRapidHitAt = now;
+    const tune = WEAPON_ROLE_TUNING.rapid;
+    mult *= Math.max(tune.diminishingFloor, 1 - (enemy.rapidHitStreak - 1) * tune.diminishingPerStreak);
+  } else if (weaponId === 'spread') {
+    const distToPlayer = distance(enemy, state.player);
+    const closeBonus = distToPlayer <= 170 ? 0.22 : distToPlayer >= 320 ? -0.18 : 0;
+    const swarmBonus = Math.min(0.2, nearby * 0.05);
+    mult += closeBonus + swarmBonus;
+  } else if (weaponId === 'laser') {
+    const hpRatio = enemy.maxHp > 0 ? enemy.hp / enemy.maxHp : 1;
+    mult += enemy.maxHp >= 12 ? 0.26 : 0;
+    if (enemy.maxHp <= 4) mult -= 0.12;
+    if (hpRatio > 0.75) mult += 0.08;
+    if (bullet.hitCount > 0) {
+      const tune = WEAPON_ROLE_TUNING.laser;
+      mult *= Math.max(tune.pierceFloor, 1 - bullet.hitCount * tune.pierceDiminish);
+    }
+  } else if (weaponId === 'arc') {
+    const groupCount = enemyCountNear(enemy, (bullet.splashRadius || 80) * 1.12);
+    if (groupCount === 0 && !isSplash) mult *= 0.78;
+    else mult += Math.min(0.3, groupCount * 0.06);
+  } else if (weaponId === 'blaster') {
+    if (enemy.maxHp > 0 && enemy.hp / enemy.maxHp < 0.35) mult += 0.1;
+  }
+
+  return clamp(mult, 0.45, 1.6);
+}
+
+function computeBulletHitDamage(bullet, enemy, now, isSplash = false) {
+  const falloff = weaponFalloffMultiplier(bullet);
+  const situational = situationalWeaponMultiplier(bullet, enemy, now, isSplash);
+  const splashPenalty = isSplash ? 0.72 : 1;
+  return bullet.damage * falloff * situational * splashPenalty;
 }
 
 function updateDrones(dtMs, now) {
@@ -2457,6 +2532,7 @@ function killEnemy(index, enemy) {
 }
 
 function handleCollisions() {
+  const now = performance.now();
   for (let b = state.bullets.length - 1; b >= 0; b--) {
     const bullet = state.bullets[b];
     let bulletConsumed = false;
@@ -2466,7 +2542,7 @@ function handleCollisions() {
       if (!circlesHit(bullet, enemy)) continue;
       const wdef = WEAPON_DEFS[bullet.weaponId] || WEAPON_DEFS.blaster;
 
-      enemy.hp -= bullet.damage;
+      enemy.hp -= computeBulletHitDamage(bullet, enemy, now, false);
       if (enemy.hp <= 0) killEnemy(e, enemy);
       else {
         addExplosion(enemy.x, enemy.y, wdef.impact, bullet.weaponId === 'rapid' ? 4 : 7, bullet.weaponId === 'arc' ? 26 : 18);
@@ -2478,12 +2554,13 @@ function handleCollisions() {
           if (other === enemy) continue;
           const d = distance(enemy, other);
           if (d <= bullet.splashRadius) {
-            applyDamageToEnemyRef(other, bullet.damage * (1 - d / bullet.splashRadius) * 0.65);
+            applyDamageToEnemyRef(other, computeBulletHitDamage(bullet, other, now, true) * (1 - d / bullet.splashRadius) * 0.65);
           }
         }
         addExplosion(enemy.x, enemy.y, '#8ac4ff', 14, bullet.splashRadius * 0.44);
         bulletConsumed = true;
       } else if (bullet.pierce > 0) {
+        bullet.hitCount += 1;
         bullet.pierce -= 1;
         bullet.damage *= 0.94;
       } else {
