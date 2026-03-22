@@ -46,6 +46,20 @@ const shopSummaryEl = document.getElementById('shopSummary');
 const shopCreditsEl = document.getElementById('shopCredits');
 const shopButtonsEl = document.getElementById('shopButtons');
 const nextWaveButton = document.getElementById('nextWaveButton');
+const skillTreeOverlay = document.getElementById('skillTreeOverlay');
+const skillTreeCanvas = document.getElementById('skillTreeCanvas');
+const skillTreeViewport = document.getElementById('skillTreeViewport');
+const skillTreeCategoryButtons = document.getElementById('skillTreeCategoryButtons');
+const skillTreeWeaponSubButtons = document.getElementById('skillTreeWeaponSubButtons');
+const skillTreeNodeName = document.getElementById('skillTreeNodeName');
+const skillTreeNodeCost = document.getElementById('skillTreeNodeCost');
+const skillTreeNodeDesc = document.getElementById('skillTreeNodeDesc');
+const skillTreeNodeReq = document.getElementById('skillTreeNodeReq');
+const skillTreeBuyBtn = document.getElementById('skillTreeBuyBtn');
+const skillTreeBackBtn = document.getElementById('skillTreeBackBtn');
+const skillTreeSaveStatus = document.getElementById('skillTreeSaveStatus');
+const skillTreeTopMeta = document.getElementById('skillTreeTopMeta');
+const skillTreeBuildInfo = document.getElementById('skillTreeBuildInfo');
 
 // -------------------------------------------------
 // Constants
@@ -60,7 +74,7 @@ const GAME_STATE = {
   GAME_OVER: 'game_over',
 };
 
-const GAME_VERSION = 'v0.12';
+const GAME_VERSION = 'v0.13';
 const BUILD_TIME = new Date().toLocaleTimeString();
 
 const SETTINGS = {
@@ -163,6 +177,51 @@ const META_SKILL_TREE = {
     { id: 'salvage', label: 'Salvage Routing', size: META_NODE_SIZE.SMALL, maxLevel: 5, baseCost: 8, costStep: 5, desc: '+6% credits per level' },
     { id: 'contract', label: 'Contract Ledger', size: META_NODE_SIZE.MEDIUM, maxLevel: 3, baseCost: 28, costStep: 14, desc: '+4 gems at run end per level' },
     { id: 'economyKeystone', label: 'Keystone: Compound Interest', size: META_NODE_SIZE.KEYSTONE, maxLevel: 1, baseCost: 100, costStep: 0, desc: '+15% credits and +15% run score' },
+  ],
+};
+
+const SKILL_TREE_UI = {
+  sidebarWidth: 230,
+  infoWidth: 310,
+  nodeSize: 24,
+  keystoneSize: 34,
+  nodeSpacingX: 170,
+  nodeSpacingY: 120,
+  lineThickness: 3,
+  glow: 16,
+};
+
+const SKILL_TREE_CATEGORIES = ['weapons', 'drones', 'defense', 'offense', 'economy'];
+const SKILL_TREE_WEAPON_SUBS = ['blaster', 'rapid', 'spread', 'laser', 'arc'];
+const SKILL_TREE_GRAPH = {
+  weapons: [
+    { id: 'blaster', x: 140, y: 210, prereqs: [] },
+    { id: 'rapid', x: 310, y: 210, prereqs: ['blaster'] },
+    { id: 'spread', x: 480, y: 210, prereqs: ['rapid'] },
+    { id: 'laser', x: 650, y: 210, prereqs: ['spread'] },
+    { id: 'arc', x: 820, y: 210, prereqs: ['laser'] },
+    { id: 'weaponCore', x: 520, y: 370, prereqs: ['rapid', 'spread'] },
+    { id: 'weaponKeystone', x: 520, y: 530, prereqs: ['weaponCore'] },
+  ],
+  drones: [
+    { id: 'droneDamage', x: 260, y: 220, prereqs: [] },
+    { id: 'droneRelay', x: 510, y: 320, prereqs: ['droneDamage'] },
+    { id: 'droneKeystone', x: 760, y: 460, prereqs: ['droneRelay'] },
+  ],
+  defense: [
+    { id: 'hull', x: 250, y: 240, prereqs: [] },
+    { id: 'shield', x: 510, y: 340, prereqs: ['hull'] },
+    { id: 'defenseKeystone', x: 760, y: 500, prereqs: ['shield'] },
+  ],
+  offense: [
+    { id: 'impact', x: 250, y: 240, prereqs: [] },
+    { id: 'crit', x: 510, y: 320, prereqs: ['impact'] },
+    { id: 'offenseKeystone', x: 760, y: 500, prereqs: ['crit'] },
+  ],
+  economy: [
+    { id: 'salvage', x: 250, y: 240, prereqs: [] },
+    { id: 'contract', x: 510, y: 330, prereqs: ['salvage'] },
+    { id: 'economyKeystone', x: 760, y: 500, prereqs: ['contract'] },
   ],
 };
 
@@ -744,6 +803,18 @@ const state = {
   },
 
   settings: { ...DEFAULT_PLAYER_SETTINGS },
+  skillTreeUI: {
+    category: 'weapons',
+    weaponSub: 'blaster',
+    panX: 0,
+    panY: 0,
+    drag: false,
+    lastX: 0,
+    lastY: 0,
+    selectedNodeId: null,
+    saveStatusUntil: 0,
+    returnToPause: false,
+  },
 
   player: null,
   enemies: [],
@@ -1825,6 +1896,7 @@ function setMenu(title, text, buttons, options = {}) {
 
   menuOverlay.classList.remove('hidden');
   shopOverlay.classList.add('hidden');
+  skillTreeOverlay.classList.add('hidden');
 }
 
 function showMainMenu() {
@@ -1886,42 +1958,203 @@ function showSaveSlotsMenu() {
   setMenu('SAVE SLOTS', 'Load, start new, or delete any slot. Progress autosaves.', buttons);
 }
 
-function showSkillTreeMenu() {
-  state.gameState = GAME_STATE.HOW_TO_PLAY;
-  const buttons = [];
-  const order = ['weapons', 'drones', 'defense', 'offense', 'economy'];
-  const titleByCategory = {
-    weapons: 'WEAPONS TREE',
-    drones: 'DRONES TREE',
-    defense: 'DEFENSE TREE',
-    offense: 'OFFENSE TREE',
-    economy: 'ECONOMY TREE',
-  };
+function graphNodesForCurrentCategory() {
+  const category = state.skillTreeUI.category;
+  const base = SKILL_TREE_GRAPH[category] || [];
+  if (category !== 'weapons') return base;
+  return base.filter((n) => !SKILL_TREE_WEAPON_SUBS.includes(n.id) || n.id === state.skillTreeUI.weaponSub);
+}
 
-  order.forEach((category) => {
-    buttons.push({ label: `--- ${titleByCategory[category]} ---`, onClick: () => {} });
-    META_SKILL_TREE[category].forEach((node) => {
-      const lvl = metaNodeLevel(category, node.id);
-      const atCap = lvl >= node.maxLevel;
-      const cost = node.baseCost + lvl * node.costStep;
-      const sizeLabel = node.size === META_NODE_SIZE.KEYSTONE ? 'Keystone' : (node.size === META_NODE_SIZE.MEDIUM ? 'Medium' : 'Small');
-      buttons.push({
-        label: `[${sizeLabel}] ${node.label} Lv${lvl}/${node.maxLevel}${atCap ? ' (MAX)' : ` (Cost ${cost})`} — ${node.desc}`,
-        onClick: () => {
-          if (atCap) return;
-          if (state.profile.gems < cost) return;
-          state.profile.gems -= cost;
-          state.profile.skillTree[category][node.id] += 1;
-          saveActiveSlot();
-          showSkillTreeMenu();
-        },
-      });
+function metaNodeById(category, nodeId) {
+  return (META_SKILL_TREE[category] || []).find((n) => n.id === nodeId);
+}
+
+function areNodePrereqsMet(category, nodeId) {
+  const graphNode = (SKILL_TREE_GRAPH[category] || []).find((n) => n.id === nodeId);
+  if (!graphNode || !graphNode.prereqs || graphNode.prereqs.length === 0) return true;
+  return graphNode.prereqs.every((reqId) => metaNodeLevel(category, reqId) > 0);
+}
+
+function nodeState(category, nodeId) {
+  const def = metaNodeById(category, nodeId);
+  if (!def) return 'locked';
+  const lvl = metaNodeLevel(category, nodeId);
+  if (lvl > 0) return 'purchased';
+  if (areNodePrereqsMet(category, nodeId)) return 'available';
+  return 'locked';
+}
+
+function drawSkillTreeScreen() {
+  if (!skillTreeCanvas) return;
+  const ctxTree = skillTreeCanvas.getContext('2d');
+  const rect = skillTreeViewport.getBoundingClientRect();
+  skillTreeCanvas.width = Math.floor(rect.width);
+  skillTreeCanvas.height = Math.floor(rect.height);
+
+  ctxTree.fillStyle = '#050914';
+  ctxTree.fillRect(0, 0, skillTreeCanvas.width, skillTreeCanvas.height);
+
+  // Subtle rift-like background.
+  const bg = ctxTree.createRadialGradient(skillTreeCanvas.width * 0.55, skillTreeCanvas.height * 0.45, 30, skillTreeCanvas.width * 0.55, skillTreeCanvas.height * 0.45, skillTreeCanvas.width * 0.65);
+  bg.addColorStop(0, 'rgba(138, 70, 255, 0.24)');
+  bg.addColorStop(0.5, 'rgba(114, 255, 170, 0.1)');
+  bg.addColorStop(1, 'rgba(0,0,0,0)');
+  ctxTree.fillStyle = bg;
+  ctxTree.fillRect(0, 0, skillTreeCanvas.width, skillTreeCanvas.height);
+
+  const nodes = graphNodesForCurrentCategory();
+  const map = new Map(nodes.map((n) => [n.id, n]));
+
+  ctxTree.save();
+  ctxTree.translate(state.skillTreeUI.panX, state.skillTreeUI.panY);
+  ctxTree.lineWidth = SKILL_TREE_UI.lineThickness;
+  nodes.forEach((n) => {
+    (n.prereqs || []).forEach((req) => {
+      const p = map.get(req) || (SKILL_TREE_GRAPH[state.skillTreeUI.category] || []).find((x) => x.id === req);
+      if (!p) return;
+      ctxTree.strokeStyle = 'rgba(130,155,210,0.45)';
+      ctxTree.beginPath();
+      ctxTree.moveTo(p.x, p.y);
+      ctxTree.lineTo(n.x, n.y);
+      ctxTree.stroke();
     });
   });
 
-  buttons.push({ label: `Active Slot: ${state.activeSaveSlot}`, onClick: () => {} });
-  buttons.push({ label: 'Back to Main Menu', onClick: showMainMenu });
-  setMenu('META SKILL TREE', `Spend Gems on persistent tree nodes. Node sizes: Small, Medium, Keystone. Gems: ${state.profile.gems}`, buttons);
+  nodes.forEach((n) => {
+    const def = metaNodeById(state.skillTreeUI.category, n.id);
+    if (!def) return;
+    const stateKey = nodeState(state.skillTreeUI.category, n.id);
+    const isKeystone = def.size === META_NODE_SIZE.KEYSTONE;
+    const radius = isKeystone ? SKILL_TREE_UI.keystoneSize : SKILL_TREE_UI.nodeSize;
+    const isSelected = state.skillTreeUI.selectedNodeId === n.id;
+
+    if (stateKey === 'available') {
+      ctxTree.shadowColor = 'rgba(120,255,180,0.8)';
+      ctxTree.shadowBlur = SKILL_TREE_UI.glow;
+    } else if (stateKey === 'purchased') {
+      ctxTree.shadowColor = 'rgba(170,120,255,0.9)';
+      ctxTree.shadowBlur = SKILL_TREE_UI.glow + 6;
+    } else {
+      ctxTree.shadowBlur = 0;
+    }
+
+    ctxTree.fillStyle = stateKey === 'purchased'
+      ? '#9b6cff'
+      : stateKey === 'available'
+        ? '#5fd89a'
+        : '#2a3343';
+    ctxTree.strokeStyle = isKeystone ? '#b8ff73' : '#a2d1ff';
+    ctxTree.lineWidth = isSelected ? 4 : 2;
+    // geometric diamond node
+    ctxTree.beginPath();
+    ctxTree.moveTo(n.x, n.y - radius);
+    ctxTree.lineTo(n.x + radius, n.y);
+    ctxTree.lineTo(n.x, n.y + radius);
+    ctxTree.lineTo(n.x - radius, n.y);
+    ctxTree.closePath();
+    ctxTree.fill();
+    ctxTree.stroke();
+
+    ctxTree.shadowBlur = 0;
+    ctxTree.fillStyle = '#eaf6ff';
+    ctxTree.font = isKeystone ? 'bold 13px Segoe UI' : '12px Segoe UI';
+    ctxTree.textAlign = 'center';
+    ctxTree.fillText(def.label, n.x, n.y + radius + 16);
+  });
+  ctxTree.restore();
+}
+
+function skillTreeNodeAt(clientX, clientY) {
+  const rect = skillTreeCanvas.getBoundingClientRect();
+  const x = (clientX - rect.left) * (skillTreeCanvas.width / rect.width) - state.skillTreeUI.panX;
+  const y = (clientY - rect.top) * (skillTreeCanvas.height / rect.height) - state.skillTreeUI.panY;
+  const nodes = graphNodesForCurrentCategory();
+  for (const node of nodes) {
+    const def = metaNodeById(state.skillTreeUI.category, node.id);
+    if (!def) continue;
+    const r = def.size === META_NODE_SIZE.KEYSTONE ? SKILL_TREE_UI.keystoneSize : SKILL_TREE_UI.nodeSize;
+    if (Math.hypot(node.x - x, node.y - y) <= r + 8) return node.id;
+  }
+  return null;
+}
+
+function refreshSkillTreeSidebar() {
+  if (!skillTreeCategoryButtons) return;
+  skillTreeCategoryButtons.innerHTML = '';
+  SKILL_TREE_CATEGORIES.forEach((cat) => {
+    const btn = document.createElement('button');
+    btn.className = 'menu-btn';
+    btn.textContent = cat[0].toUpperCase() + cat.slice(1);
+    if (cat === state.skillTreeUI.category) btn.style.borderColor = 'rgba(120,255,180,0.95)';
+    btn.addEventListener('click', () => {
+      state.skillTreeUI.category = cat;
+      state.skillTreeUI.selectedNodeId = null;
+      refreshSkillTreeUI();
+    });
+    skillTreeCategoryButtons.appendChild(btn);
+  });
+
+  skillTreeWeaponSubButtons.innerHTML = '';
+  if (state.skillTreeUI.category === 'weapons') {
+    SKILL_TREE_WEAPON_SUBS.forEach((w) => {
+      const btn = document.createElement('button');
+      btn.className = 'menu-btn';
+      btn.textContent = w[0].toUpperCase() + w.slice(1);
+      if (w === state.skillTreeUI.weaponSub) btn.style.borderColor = 'rgba(178,92,255,0.95)';
+      btn.addEventListener('click', () => {
+        state.skillTreeUI.weaponSub = w;
+        state.skillTreeUI.selectedNodeId = w;
+        refreshSkillTreeUI();
+      });
+      skillTreeWeaponSubButtons.appendChild(btn);
+    });
+  }
+}
+
+function refreshSkillTreeInfoPanel() {
+  const category = state.skillTreeUI.category;
+  const id = state.skillTreeUI.selectedNodeId;
+  const def = id ? metaNodeById(category, id) : null;
+  if (!def) {
+    skillTreeNodeName.textContent = 'Select a node';
+    skillTreeNodeCost.textContent = '-';
+    skillTreeNodeDesc.textContent = 'Pick a node to view details.';
+    skillTreeNodeReq.textContent = '-';
+    skillTreeBuyBtn.disabled = true;
+    return;
+  }
+  const lvl = metaNodeLevel(category, id);
+  const atCap = lvl >= def.maxLevel;
+  const cost = def.baseCost + lvl * def.costStep;
+  const canBuy = !atCap && areNodePrereqsMet(category, id) && state.profile.gems >= cost;
+  const graphNode = (SKILL_TREE_GRAPH[category] || []).find((n) => n.id === id);
+  skillTreeNodeName.textContent = `${def.label} Lv${lvl}/${def.maxLevel}`;
+  skillTreeNodeCost.textContent = atCap ? 'MAX' : `${cost} Gems`;
+  skillTreeNodeDesc.textContent = def.desc;
+  skillTreeNodeReq.textContent = (graphNode && graphNode.prereqs && graphNode.prereqs.length)
+    ? graphNode.prereqs.join(', ')
+    : 'None';
+  skillTreeBuyBtn.disabled = !canBuy;
+}
+
+function refreshSkillTreeUI() {
+  refreshSkillTreeSidebar();
+  drawSkillTreeScreen();
+  refreshSkillTreeInfoPanel();
+  skillTreeTopMeta.textContent = `Save Slot ${state.activeSaveSlot} • Gems ${state.profile.gems}`;
+  skillTreeBuildInfo.textContent = `${GAME_VERSION} | ${BUILD_TIME}`;
+  if (performance.now() < state.skillTreeUI.saveStatusUntil) skillTreeSaveStatus.textContent = 'Saved.';
+  else skillTreeSaveStatus.textContent = 'Autosaves on purchase.';
+}
+
+function showSkillTreeMenu(fromPause = false) {
+  state.skillTreeUI.returnToPause = fromPause;
+  state.previousMenuState = fromPause ? GAME_STATE.PAUSED : GAME_STATE.MAIN_MENU;
+  state.gameState = GAME_STATE.SETTINGS_MENU;
+  menuOverlay.classList.add('hidden');
+  shopOverlay.classList.add('hidden');
+  skillTreeOverlay.classList.remove('hidden');
+  refreshSkillTreeUI();
 }
 
 function showHowToPlay() {
@@ -2017,6 +2250,7 @@ function showPauseMenu() {
     'Gameplay is paused. Choose an option.',
     [
       { label: 'Resume', onClick: () => { state.gameState = GAME_STATE.PLAYING; menuOverlay.classList.add('hidden'); } },
+      { label: 'Meta Skill Tree', onClick: () => showSkillTreeMenu(true) },
       { label: 'Settings', onClick: showSettingsMenu },
       { label: 'Restart Run', onClick: startRun },
       { label: 'Return to Main Menu', onClick: showMainMenu },
@@ -2975,7 +3209,97 @@ if (touchControlsEl) {
   });
 }
 
-window.addEventListener('resize', updateTouchControlsVisibility);
+window.addEventListener('resize', () => {
+  updateTouchControlsVisibility();
+  if (!skillTreeOverlay.classList.contains('hidden')) refreshSkillTreeUI();
+});
+
+if (skillTreeBackBtn) {
+  skillTreeBackBtn.addEventListener('click', () => {
+    skillTreeOverlay.classList.add('hidden');
+    if (state.skillTreeUI.returnToPause) showPauseMenu();
+    else showMainMenu();
+  });
+}
+
+if (skillTreeBuyBtn) {
+  skillTreeBuyBtn.addEventListener('click', () => {
+    const category = state.skillTreeUI.category;
+    const id = state.skillTreeUI.selectedNodeId;
+    const def = id ? metaNodeById(category, id) : null;
+    if (!def) return;
+    const lvl = metaNodeLevel(category, id);
+    const cost = def.baseCost + lvl * def.costStep;
+    if (lvl >= def.maxLevel) return;
+    if (!areNodePrereqsMet(category, id)) return;
+    if (state.profile.gems < cost) return;
+    state.profile.gems -= cost;
+    state.profile.skillTree[category][id] += 1;
+    saveActiveSlot();
+    state.skillTreeUI.saveStatusUntil = performance.now() + 1400;
+    refreshSkillTreeUI();
+  });
+}
+
+if (skillTreeCanvas) {
+  skillTreeCanvas.addEventListener('mousedown', (event) => {
+    if (skillTreeOverlay.classList.contains('hidden')) return;
+    state.skillTreeUI.drag = true;
+    state.skillTreeUI.lastX = event.clientX;
+    state.skillTreeUI.lastY = event.clientY;
+  });
+  skillTreeCanvas.addEventListener('mousemove', (event) => {
+    if (!state.skillTreeUI.drag) return;
+    state.skillTreeUI.panX += event.clientX - state.skillTreeUI.lastX;
+    state.skillTreeUI.panY += event.clientY - state.skillTreeUI.lastY;
+    state.skillTreeUI.lastX = event.clientX;
+    state.skillTreeUI.lastY = event.clientY;
+    drawSkillTreeScreen();
+  });
+  skillTreeCanvas.addEventListener('mouseup', () => { state.skillTreeUI.drag = false; });
+  skillTreeCanvas.addEventListener('mouseleave', () => { state.skillTreeUI.drag = false; });
+  skillTreeCanvas.addEventListener('click', (event) => {
+    if (skillTreeOverlay.classList.contains('hidden')) return;
+    const id = skillTreeNodeAt(event.clientX, event.clientY);
+    if (id) {
+      state.skillTreeUI.selectedNodeId = id;
+      refreshSkillTreeUI();
+    }
+  });
+  skillTreeCanvas.addEventListener('wheel', (event) => {
+    if (skillTreeOverlay.classList.contains('hidden')) return;
+    event.preventDefault();
+    state.skillTreeUI.panY -= event.deltaY * 0.5;
+    drawSkillTreeScreen();
+  }, { passive: false });
+  skillTreeCanvas.addEventListener('touchstart', (event) => {
+    if (skillTreeOverlay.classList.contains('hidden') || event.touches.length === 0) return;
+    const t = event.touches[0];
+    state.skillTreeUI.drag = true;
+    state.skillTreeUI.lastX = t.clientX;
+    state.skillTreeUI.lastY = t.clientY;
+  }, { passive: true });
+  skillTreeCanvas.addEventListener('touchmove', (event) => {
+    if (!state.skillTreeUI.drag || event.touches.length === 0) return;
+    const t = event.touches[0];
+    state.skillTreeUI.panX += t.clientX - state.skillTreeUI.lastX;
+    state.skillTreeUI.panY += t.clientY - state.skillTreeUI.lastY;
+    state.skillTreeUI.lastX = t.clientX;
+    state.skillTreeUI.lastY = t.clientY;
+    drawSkillTreeScreen();
+  }, { passive: true });
+  skillTreeCanvas.addEventListener('touchend', (event) => {
+    state.skillTreeUI.drag = false;
+    if (event.changedTouches.length > 0) {
+      const t = event.changedTouches[0];
+      const id = skillTreeNodeAt(t.clientX, t.clientY);
+      if (id) {
+        state.skillTreeUI.selectedNodeId = id;
+        refreshSkillTreeUI();
+      }
+    }
+  }, { passive: true });
+}
 
 gameWrap.addEventListener('contextmenu', (event) => event.preventDefault());
 nextWaveButton.addEventListener('click', () => {
