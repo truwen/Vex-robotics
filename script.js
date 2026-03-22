@@ -59,7 +59,7 @@ const GAME_STATE = {
   GAME_OVER: 'game_over',
 };
 
-const GAME_VERSION = 'v0.10';
+const GAME_VERSION = 'v0.11';
 const BUILD_TIME = new Date().toLocaleTimeString();
 
 const SETTINGS = {
@@ -125,6 +125,44 @@ const SETTINGS = {
   particleScaleLow: 0.6,
   particleScaleMedium: 0.8,
   particleScaleHigh: 1,
+};
+
+const META_NODE_SIZE = {
+  SMALL: 'small',
+  MEDIUM: 'medium',
+  KEYSTONE: 'keystone',
+};
+
+const META_SKILL_TREE = {
+  weapons: [
+    { id: 'blaster', label: 'Blaster Tuning', size: META_NODE_SIZE.SMALL, maxLevel: 5, baseCost: 8, costStep: 4, desc: '+4% Blaster damage per level' },
+    { id: 'rapid', label: 'Rapid Feed', size: META_NODE_SIZE.SMALL, maxLevel: 5, baseCost: 8, costStep: 4, desc: '+4% Rapid damage per level' },
+    { id: 'spread', label: 'Scatter Geometry', size: META_NODE_SIZE.SMALL, maxLevel: 5, baseCost: 8, costStep: 4, desc: '+4% Spread damage per level' },
+    { id: 'laser', label: 'Laser Focusing', size: META_NODE_SIZE.SMALL, maxLevel: 5, baseCost: 8, costStep: 4, desc: '+4% Laser damage per level' },
+    { id: 'arc', label: 'Arc Stabilizer', size: META_NODE_SIZE.SMALL, maxLevel: 5, baseCost: 8, costStep: 4, desc: '+4% Arc damage per level' },
+    { id: 'weaponCore', label: 'Weapon Core', size: META_NODE_SIZE.MEDIUM, maxLevel: 3, baseCost: 28, costStep: 14, desc: '+6% all weapon damage per level' },
+    { id: 'weaponKeystone', label: 'Keystone: Calibrated Arsenal', size: META_NODE_SIZE.KEYSTONE, maxLevel: 1, baseCost: 90, costStep: 0, desc: '+10% global fire-rate' },
+  ],
+  drones: [
+    { id: 'droneDamage', label: 'Drone Payload', size: META_NODE_SIZE.SMALL, maxLevel: 5, baseCost: 10, costStep: 5, desc: '+6% drone damage per level' },
+    { id: 'droneRelay', label: 'Relay Cooling', size: META_NODE_SIZE.MEDIUM, maxLevel: 3, baseCost: 32, costStep: 14, desc: '+7% drone fire-rate per level' },
+    { id: 'droneKeystone', label: 'Keystone: Hive Protocol', size: META_NODE_SIZE.KEYSTONE, maxLevel: 1, baseCost: 95, costStep: 0, desc: '+1 max drone' },
+  ],
+  defense: [
+    { id: 'hull', label: 'Hull Plating', size: META_NODE_SIZE.SMALL, maxLevel: 5, baseCost: 10, costStep: 5, desc: '+8 max health per level' },
+    { id: 'shield', label: 'Shield Reserve', size: META_NODE_SIZE.MEDIUM, maxLevel: 3, baseCost: 30, costStep: 16, desc: '+12 max shield per level' },
+    { id: 'defenseKeystone', label: 'Keystone: Aegis', size: META_NODE_SIZE.KEYSTONE, maxLevel: 1, baseCost: 105, costStep: 0, desc: '+1 starting life' },
+  ],
+  offense: [
+    { id: 'impact', label: 'Impact Drivers', size: META_NODE_SIZE.SMALL, maxLevel: 5, baseCost: 9, costStep: 5, desc: '+3% all damage per level' },
+    { id: 'crit', label: 'Crit Matrix', size: META_NODE_SIZE.MEDIUM, maxLevel: 3, baseCost: 35, costStep: 16, desc: '+3% crit chance per level' },
+    { id: 'offenseKeystone', label: 'Keystone: Glass Cannon', size: META_NODE_SIZE.KEYSTONE, maxLevel: 1, baseCost: 110, costStep: 0, desc: '+15% damage, -8% max health' },
+  ],
+  economy: [
+    { id: 'salvage', label: 'Salvage Routing', size: META_NODE_SIZE.SMALL, maxLevel: 5, baseCost: 8, costStep: 5, desc: '+6% credits per level' },
+    { id: 'contract', label: 'Contract Ledger', size: META_NODE_SIZE.MEDIUM, maxLevel: 3, baseCost: 28, costStep: 14, desc: '+4 gems at run end per level' },
+    { id: 'economyKeystone', label: 'Keystone: Compound Interest', size: META_NODE_SIZE.KEYSTONE, maxLevel: 1, baseCost: 100, costStep: 0, desc: '+15% credits and +15% run score' },
+  ],
 };
 
 const SHOP_LAYOUT = {
@@ -778,11 +816,7 @@ const state = {
   activeSaveSlot: 1,
   profile: {
     gems: 0,
-    skillTree: {
-      economy: 0,
-      survival: 0,
-      weaponMastery: 0,
-    },
+    skillTree: {},
     unlocks: {
       spread: false,
       laser: false,
@@ -948,7 +982,13 @@ function saveHighScores() {
 function emptyProfile() {
   return {
     gems: 0,
-    skillTree: { economy: 0, survival: 0, weaponMastery: 0 },
+    skillTree: {
+      weapons: { blaster: 0, rapid: 0, spread: 0, laser: 0, arc: 0, weaponCore: 0, weaponKeystone: 0 },
+      drones: { droneDamage: 0, droneRelay: 0, droneKeystone: 0 },
+      defense: { hull: 0, shield: 0, defenseKeystone: 0 },
+      offense: { impact: 0, crit: 0, offenseKeystone: 0 },
+      economy: { salvage: 0, contract: 0, economyKeystone: 0 },
+    },
     unlocks: { spread: false, laser: false, arc: false, bomber: false, electricity: false, laserDrone: false },
   };
 }
@@ -964,11 +1004,33 @@ function loadSaveSlot(slotIndex) {
       return false;
     }
     const parsed = JSON.parse(raw);
+    const defaults = emptyProfile();
+    const legacyTree = parsed.skillTree || {};
+    const migratedTree = {
+      ...defaults.skillTree,
+      weapons: {
+        ...defaults.skillTree.weapons,
+        ...(legacyTree.weapons || {}),
+        weaponCore: legacyTree.weaponMastery || (legacyTree.weapons ? (legacyTree.weapons.weaponCore || 0) : 0),
+      },
+      drones: { ...defaults.skillTree.drones, ...(legacyTree.drones || {}) },
+      defense: {
+        ...defaults.skillTree.defense,
+        ...(legacyTree.defense || {}),
+        hull: legacyTree.survival || (legacyTree.defense ? (legacyTree.defense.hull || 0) : 0),
+      },
+      offense: { ...defaults.skillTree.offense, ...(legacyTree.offense || {}) },
+      economy: {
+        ...defaults.skillTree.economy,
+        ...(legacyTree.economy || {}),
+        salvage: legacyTree.economy || (legacyTree.economy ? (legacyTree.economy.salvage || 0) : 0),
+      },
+    };
     state.profile = {
-      ...emptyProfile(),
+      ...defaults,
       ...parsed,
-      skillTree: { ...emptyProfile().skillTree, ...(parsed.skillTree || {}) },
-      unlocks: { ...emptyProfile().unlocks, ...(parsed.unlocks || {}) },
+      skillTree: migratedTree,
+      unlocks: { ...defaults.unlocks, ...(parsed.unlocks || {}) },
     };
     return true;
   } catch (_err) {
@@ -1049,13 +1111,29 @@ function addPickupLabel(text, x, y, color = '#eafff5', emphasis = 'normal') {
   });
 }
 
+function metaNodeLevel(category, nodeId) {
+  return (((state.profile.skillTree || {})[category] || {})[nodeId]) || 0;
+}
+
+function weaponMetaBonus(weaponId) {
+  return metaNodeLevel('weapons', weaponId) * 0.04 + metaNodeLevel('weapons', 'weaponCore') * 0.06;
+}
+
+function maxDronesAllowed() {
+  return SETTINGS.maxDrones + (metaNodeLevel('drones', 'droneKeystone') > 0 ? 1 : 0);
+}
+
+function scoreMultiplier() {
+  return 1 + (metaNodeLevel('economy', 'economyKeystone') > 0 ? 0.15 : 0);
+}
+
 // -------------------------------------------------
 // Stat helpers
 // -------------------------------------------------
 function fireDelay() {
   const weapon = activeWeaponDef();
   const base = Math.max(55, weapon.fireDelayMs - state.upgrades.rapidFire * 8);
-  const boost = 1 + state.runBonuses.fireRateMultiplier;
+  const boost = 1 + state.runBonuses.fireRateMultiplier + (metaNodeLevel('weapons', 'weaponKeystone') > 0 ? 0.1 : 0);
   return base / boost;
 }
 function thrustPower() {
@@ -1071,7 +1149,10 @@ function pickupPullStrength() {
   return PICKUP_SETTINGS.moneyAttractionBase + state.upgrades.magnetField * PICKUP_SETTINGS.moneyAttractionPerTier;
 }
 function salvageMultiplier() {
-  return 1 + state.upgrades.salvageBonus * 0.18 + state.upgrades.deepCoreSalvage * 0.08 + state.profile.skillTree.economy * 0.05;
+  let mult = 1 + state.upgrades.salvageBonus * 0.18 + state.upgrades.deepCoreSalvage * 0.08;
+  mult += metaNodeLevel('economy', 'salvage') * 0.06;
+  if (metaNodeLevel('economy', 'economyKeystone') > 0) mult += 0.15;
+  return mult;
 }
 function waveScale(wave = state.wave) {
   const w = Math.max(1, wave);
@@ -1086,15 +1167,22 @@ function waveScale(wave = state.wave) {
   };
 }
 function weaponDamageMultiplier() {
+  const weaponId = activeWeaponId();
+  const offenseImpact = metaNodeLevel('offense', 'impact') * 0.03;
+  const offenseKeystone = metaNodeLevel('offense', 'offenseKeystone') > 0 ? 0.15 : 0;
   return 1
     + state.upgrades.overchargedRounds * 0.16
     + state.upgrades.weaponTuning * 0.08
-    + state.profile.skillTree.weaponMastery * 0.05
+    + weaponMetaBonus(weaponId)
+    + offenseImpact
+    + offenseKeystone
     + state.runBonuses.damageMultiplier
     + state.runBonuses.permanentWeaponBonus;
 }
 function critMultiplier() {
-  return state.runBonuses.critChance > 0 && Math.random() < state.runBonuses.critChance ? 1.75 : 1;
+  const metaCritChance = metaNodeLevel('offense', 'crit') * 0.03;
+  const totalCritChance = state.runBonuses.critChance + metaCritChance;
+  return totalCritChance > 0 && Math.random() < totalCritChance ? 1.75 : 1;
 }
 function weaponProjectileSpeed() {
   return activeWeaponDef().bulletSpeed + state.upgrades.velocityRounds * 0.9;
@@ -1123,12 +1211,12 @@ function createPlayer() {
     angle: -Math.PI / 2,
     radius: 14,
 
-    maxHealth: SETTINGS.baseMaxHealth + state.profile.skillTree.survival * 10,
-    health: SETTINGS.baseMaxHealth + state.profile.skillTree.survival * 10,
-    maxShield: SETTINGS.baseMaxShield,
-    shield: SETTINGS.baseMaxShield,
+    maxHealth: Math.round((SETTINGS.baseMaxHealth + metaNodeLevel('defense', 'hull') * 8) * (metaNodeLevel('offense', 'offenseKeystone') > 0 ? 0.92 : 1)),
+    health: Math.round((SETTINGS.baseMaxHealth + metaNodeLevel('defense', 'hull') * 8) * (metaNodeLevel('offense', 'offenseKeystone') > 0 ? 0.92 : 1)),
+    maxShield: SETTINGS.baseMaxShield + metaNodeLevel('defense', 'shield') * 12,
+    shield: SETTINGS.baseMaxShield + metaNodeLevel('defense', 'shield') * 12,
     shieldRegen: SETTINGS.shieldRegenPerSecond,
-    lives: SETTINGS.startLives,
+    lives: SETTINGS.startLives + (metaNodeLevel('defense', 'defenseKeystone') > 0 ? 1 : 0),
 
     invincibleUntil: 0,
   };
@@ -1280,7 +1368,7 @@ function unlockRandomWeapon() {
 // Drone system
 // -------------------------------------------------
 function unlockDrone(type) {
-  if (state.drones.length >= SETTINGS.maxDrones) return;
+  if (state.drones.length >= maxDronesAllowed()) return;
   if (state.drones.some((d) => d.type === type)) return;
 
   const baseAngle = rand(0, Math.PI * 2);
@@ -1330,8 +1418,11 @@ function applyDamageToEnemyRef(enemyRef, dmg) {
 
 function updateDrones(dtMs, now) {
   const p = state.player;
-  const droneMult = 1 + state.upgrades.droneOverclock * 0.12 + state.runBonuses.droneDamageMultiplier;
-  const cooldownMult = Math.max(0.45, 1 - state.upgrades.droneCooldown * 0.04);
+  const droneMult = 1
+    + state.upgrades.droneOverclock * 0.12
+    + state.runBonuses.droneDamageMultiplier
+    + metaNodeLevel('drones', 'droneDamage') * 0.06;
+  const cooldownMult = Math.max(0.45, 1 - state.upgrades.droneCooldown * 0.04 - metaNodeLevel('drones', 'droneRelay') * 0.07);
   state.beamEffects = [];
   state.arcEffects = [];
 
@@ -1533,7 +1624,8 @@ function pauseRun() {
 }
 
 function endRun() {
-  const earnedGems = Math.max(0, Math.floor(state.totalCreditsEarned / 25));
+  const economyGemBonus = metaNodeLevel('economy', 'contract') * 4;
+  const earnedGems = Math.max(0, Math.floor(state.totalCreditsEarned / 25) + economyGemBonus);
   state.profile.gems += earnedGems;
   saveActiveSlot();
   state.highScores.bestScore = Math.max(state.highScores.bestScore, Math.floor(state.score));
@@ -1684,30 +1776,40 @@ function showSaveSlotsMenu() {
 
 function showSkillTreeMenu() {
   state.gameState = GAME_STATE.HOW_TO_PLAY;
-  const skills = [
-    { id: 'economy', label: 'Economy Uplink', desc: '+5% credits and orb value', cost: (lvl) => 20 + lvl * 15 },
-    { id: 'survival', label: 'Hull Matrix', desc: '+10 max health per tier', cost: (lvl) => 25 + lvl * 20 },
-    { id: 'weaponMastery', label: 'Weapon Mastery', desc: '+5% weapon damage per tier', cost: (lvl) => 25 + lvl * 20 },
-  ];
+  const buttons = [];
+  const order = ['weapons', 'drones', 'defense', 'offense', 'economy'];
+  const titleByCategory = {
+    weapons: 'WEAPONS TREE',
+    drones: 'DRONES TREE',
+    defense: 'DEFENSE TREE',
+    offense: 'OFFENSE TREE',
+    economy: 'ECONOMY TREE',
+  };
 
-  const buttons = skills.map((s) => {
-    const lvl = state.profile.skillTree[s.id];
-    const cost = s.cost(lvl);
-    return {
-      label: `${s.label} Lv${lvl} (Cost ${cost}) — ${s.desc}`,
-      onClick: () => {
-        if (state.profile.gems < cost) return;
-        state.profile.gems -= cost;
-        state.profile.skillTree[s.id] += 1;
-        saveActiveSlot();
-        showSkillTreeMenu();
-      },
-    };
+  order.forEach((category) => {
+    buttons.push({ label: `--- ${titleByCategory[category]} ---`, onClick: () => {} });
+    META_SKILL_TREE[category].forEach((node) => {
+      const lvl = metaNodeLevel(category, node.id);
+      const atCap = lvl >= node.maxLevel;
+      const cost = node.baseCost + lvl * node.costStep;
+      const sizeLabel = node.size === META_NODE_SIZE.KEYSTONE ? 'Keystone' : (node.size === META_NODE_SIZE.MEDIUM ? 'Medium' : 'Small');
+      buttons.push({
+        label: `[${sizeLabel}] ${node.label} Lv${lvl}/${node.maxLevel}${atCap ? ' (MAX)' : ` (Cost ${cost})`} — ${node.desc}`,
+        onClick: () => {
+          if (atCap) return;
+          if (state.profile.gems < cost) return;
+          state.profile.gems -= cost;
+          state.profile.skillTree[category][node.id] += 1;
+          saveActiveSlot();
+          showSkillTreeMenu();
+        },
+      });
+    });
   });
 
   buttons.push({ label: `Active Slot: ${state.activeSaveSlot}`, onClick: () => {} });
   buttons.push({ label: 'Back to Main Menu', onClick: showMainMenu });
-  setMenu('META SKILL TREE', `Spend Gems on permanent upgrades. Gems: ${state.profile.gems}`, buttons);
+  setMenu('META SKILL TREE', `Spend Gems on persistent tree nodes. Node sizes: Small, Medium, Keystone. Gems: ${state.profile.gems}`, buttons);
 }
 
 function showHowToPlay() {
@@ -2321,7 +2423,7 @@ function damagePlayer(amount) {
 
 function killEnemy(index, enemy) {
   state.totalKills += 1;
-  state.score += enemy.scoreValue;
+  state.score += Math.round(enemy.scoreValue * scoreMultiplier());
 
   const credits = Math.round(enemy.creditValue * SETTINGS.killCreditMultiplier);
   spawnCreditPickup(enemy.x, enemy.y, credits);
@@ -2454,6 +2556,7 @@ function finishWave() {
   const total = waveBonus + fastBonus + noDamageBonus;
   state.credits += total;
   state.totalCreditsEarned += total;
+  state.score += Math.round((waveBonus + fastBonus + noDamageBonus) * scoreMultiplier() * 0.4);
   audio.play('wave_clear');
 
   enterShop({ waveBonus, fastBonus, noDamageBonus });
